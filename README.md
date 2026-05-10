@@ -15,7 +15,9 @@ git config --global user.name "homeden"
 ```
 
 ## Encryption with SOPS & Age
+```
 age-keygen -o key.txt
 export SOPS_AGE_KEY_FILE="key.txt"
 find . -type f -name ".env" -exec sops -e -i {} \;
+```
 
