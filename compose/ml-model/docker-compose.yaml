@@ -1,0 +1,76 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["ml-model"]
+
+
+
+services:
+  llama-swap: 
+    container_name: llama-swap
+    image: ghcr.io/mostlygeek/llama-swap:cpu
+    environment:
+      - TZ=${TIMEZONE}
+    privileged: true
+    volumes:
+      - ${HDD_1_B_HOME}/llm:/models
+      - ${DOCKER_HOME}/llama-swap/config.yaml:/app/config.yaml
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker
+    labels:                
+      - "traefik.enable=true"
+      - "traefik.http.routers.llama-swap-rtr.rule=Host(`llama-swap.0040300.xyz`)"
+      - "traefik.http.routers.llama-swap-rtr.tls=true"
+      - "traefik.http.services.llama-swap-rtr.loadbalancer.server.port=8080"
+      - "traefik.http.routers.llama-swap-rtr.entrypoints=websecure"
+      - "traefik.http.routers.llama-swap-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.llama-swap-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.llama-swap-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=llama-swap"
+      - "homepage.icon=ollama.png"
+      - "homepage.href=http://llama-swap.0040300.xyz/"
+      - "homepage.description=LLama CPP proxy server"
+      - "homepage.siteMonitor=http://llama-swap:8080"
+    <<: *function
+
+  open-webui: 
+    container_name: open-webui
+    image: ghcr.io/open-webui/open-webui:main
+    environment:     # https://aistudio.google.com/api-keys
+      - TZ=${TIMEZONE}
+      #- OLLAMA_BASE_URL=http://ollama:8080     # in case you use ollama
+      - OPENAI_API_BASE_URL=http://llama-swap:8080/v1         # use actual port number of service container not host one
+        #- HF_HUB_OFFLINE=1        # prevent download of models from internet
+    volumes:
+      - ${DOCKER_HOME}/open-webui:/app/backend/data
+    labels:                
+      - "traefik.enable=true"
+      - "traefik.http.routers.open-webui-rtr.rule=Host(`open-webui.0040300.xyz`)"
+      - "traefik.http.routers.open-webui-rtr.tls=true"
+      - "traefik.http.services.open-webui-rtr.loadbalancer.server.port=8080"
+      - "traefik.http.routers.open-webui-rtr.entrypoints=websecure"
+      - "traefik.http.routers.open-webui-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.open-webui-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.open-webui-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=open-webui"
+      - "homepage.icon=open-webui.png"
+      - "homepage.href=http://open-webui.0040300.xyz/"
+      - "homepage.description=OpenAI frontend"
+      - "homepage.siteMonitor=http://open-webui:8080"
+    depends_on:
+      - llama-swap
+    <<: *function
+
+  # gemma:          # https://github.com/ggml-org/llama.cpp/blob/master/docs/docker.md
+  #   image: ghcr.io/ggml-org/llama.cpp:server          # also use "full" for more features
+  #   container_name: gemma
+  #   environment:
+  #     #- LLAMA_ARG_N_GPU_LAYERS=999        # specify number of model layers to offload to gpu
+  #     - LLAMA_ARG_MODEL=/models/gemma-3-1b-it-Q4_K_M.gguf
+  #   ports:
+  #     - 11435:8080
+  #   volumes:
+  #     - ${HDD_1_B_HOME}/llm:/models

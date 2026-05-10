@@ -1,0 +1,214 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["manga"]
+
+
+services:
+  suwayomi:
+    image: ghcr.io/suwayomi/tachidesk:v2.0.1761
+    container_name: suwayomi
+    user: 1000:1000
+    ports:
+      - 4567:4567
+    environment:         # https://github.com/Suwayomi/Suwayomi-Server-docker
+      - TZ=${TIMEZONE}                   # Use TZ database name from https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+      - BIND_IP=0.0.0.0
+      - BIND_PORT=4567
+      - SOCKS_PROXY_ENABLED=false
+      - BASIC_AUTH_ENABLED=true
+      - BASIC_AUTH_USERNAME=${GENERAL_USERNAME}
+      - BASIC_AUTH_PASSWORD=${GENERAL_PASSWORD}
+      - EXTENSION_REPOS=["https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json", "http://github.com/orginazation-name-2/repo-name-2"]
+      - FLARESOLVERR_ENABLED=true
+      - FLARESOLVERR_URL=http://flaresolverr:8191
+      # use below for automatic manga download
+      - DOWNLOAD_AS_CBZ=true
+      #- AUTO_DOWNLOAD_CHAPTERS=true
+      #- AUTO_DOWNLOAD_EXCLUDE_UNREAD=false
+      #- AUTO_DOWNLOAD_AHEAD_LIMIT=0
+      #- UPDATE_EXCLUDE_UNREAD=false
+      #- UPDATE_EXCLUDE_STARTED=false
+      #- UPDATE_EXCLUDE_COMPLETED=false
+      #- UPDATE_INTERVAL=6
+    volumes:            # remember to set the correct folder as library in kavita and inside suwayomi as well
+      - ${DOCKER_HOME}/suwayomi:/home/suwayomi/.local/share/Tachidesk
+      - ${HDD_1_A_HOME}/manga/suwayomi:/download
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.suwayomi-rtr.rule=Host(`suwayomi.0040300.xyz`)"
+      - "traefik.http.routers.suwayomi-rtr.tls=true"
+      - "traefik.http.services.suwayomi-rtr.loadbalancer.server.port=4567"
+      - "traefik.http.routers.suwayomi-rtr.entrypoints=websecure"
+      - "traefik.http.routers.suwayomi-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.suwayomi-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.suwayomi-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Media"
+      - "homepage.name=suwayomi"
+      - "homepage.icon=suwayomi.png"
+      - "homepage.href=http://suwayomi.0040300.xyz/"
+      - "homepage.description=Personal Manga Collection"
+      - "homepage.siteMonitor=http://suwayomi:4567"
+    depends_on:
+      - flaresolverr
+    <<: *function
+
+  kavita:
+    container_name: kavita
+    image: jvmilazz0/kavita:0.8.9
+    volumes:
+      - ${HDD_1_A_HOME}/manga/suwayomi:/manga         # we can mount multiple folders here as volumes
+      - ${HDD_1_A_HOME}/literature-1/:/literature
+      - ${HDD_1_A_HOME}/storiezz/Chinese:/storiezz-chinese
+      - ${HDD_1_A_HOME}/storiezz/forums:/storiezz-forums
+      - ${HDD_1_A_HOME}/storiezz/LitFest:/storiezz-literotica
+      - ${DOCKER_HOME}/kavita:/kavita/config
+    environment:
+      - TZ=${TIMEZONE}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kavita-rtr.rule=Host(`kavita.0040300.xyz`)"
+      - "traefik.http.routers.kavita-rtr.tls=true"
+      - "traefik.http.services.kavita-rtr.loadbalancer.server.port=5000"
+      - "traefik.http.routers.kavita-rtr.entrypoints=websecure"
+      - "traefik.http.routers.kavita-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.kavita-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.kavita-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Media"
+      - "homepage.name=kavita"
+      - "homepage.icon=kavita.png"
+      - "homepage.href=http://kavita.0040300.xyz/"
+      - "homepage.description=Personal Manga Collection"
+      - "homepage.siteMonitor=http://kavita:5000"
+    depends_on:
+      - komf
+    <<: *function
+
+  hydrus-client:
+    image: ghcr.io/hydrusnetwork/hydrus:v631
+    container_name: hydrus-client
+    environment:
+      - TZ=${TIMEZONE}
+      - UID=1000
+      - GID=1000
+    volumes:
+      - ${HDD_1_A_HOME}/hydrus/hydrus-client/db:/opt/hydrus/db
+      - ${HDD_1_A_HOME}/gallery-dl:/mnt/gallery-dl
+    tmpfs:
+      - /tmp #optional for SPEEEEEEEEEEEEEEEEEEEEEEEEED and less disk access
+    #ports:
+      #- 5800:5800   #noVNC
+      #- 5900:5900   #VNC
+      #- 45868:45868 #Booru
+      #- 45869:45869 #API
+    labels:          # run client-api service -> enable non-local connections, CORS headers
+      - "traefik.enable=true"
+      - "traefik.http.routers.hydrusclient-rtr.rule=Host(`hydrus-client.0040300.xyz`)"
+      - "traefik.http.routers.hydrusclient-rtr.tls=true"
+      - "traefik.http.services.hydrusclient-rtr.loadbalancer.server.port=5800"
+      - "traefik.http.routers.hydrusclient-rtr.entrypoints=websecure"
+      - "traefik.http.routers.hydrusclient-rtr.service=hydrusclient-rtr"
+      - "traefik.http.routers.hydrusclient-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.hydrusclient-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.hydrusclient-rtr.tls.domains[0].sans=*.0040300.xyz"
+
+      - "traefik.http.routers.hydrusapi-rtr.rule=Host(`hydrus-api.0040300.xyz`)"
+      - "traefik.http.routers.hydrusapi-rtr.tls=true"
+      - "traefik.http.services.hydrusapi-rtr.loadbalancer.server.port=45869"
+      - "traefik.http.routers.hydrusapi-rtr.entrypoints=websecure"
+      - "traefik.http.routers.hydrusapi-rtr.service=hydrusapi-rtr"
+      - "traefik.http.routers.hydrusapi-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.hydrusapi-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.hydrusapi-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=hydrus-client"
+      - "homepage.icon=hydrusclient.png"
+      - "homepage.href=http://hydrus-client.0040300.xyz/"
+      - "homepage.description=Booru Server"
+      - "homepage.siteMonitor=http://hydrus-client:45869"
+    <<: *function
+
+  hydrus-web:
+    image: ghcr.io/floogulinc/hydrus-web:1.3.0
+    container_name: hydrus-web      # remember to hit hydrus API url in browser and click proceed beforehand
+    environment:
+      - TZ=${TIMEZONE}
+    labels:      # hydrus API url -> https://api.hydrus.0040300.xyz/ hydrus API KEY -> 59482af45275cae0c7d6707a4ac723afce22ebe292d02e8994d4fdebb62e55a2
+      - "traefik.enable=true"
+      - "traefik.http.routers.hydrus-rtr.rule=Host(`hydrus.0040300.xyz`)"
+      - "traefik.http.routers.hydrus-rtr.tls=true"
+      - "traefik.http.services.hydrus-rtr.loadbalancer.server.port=80"
+      - "traefik.http.routers.hydrus-rtr.entrypoints=websecure"
+      - "traefik.http.routers.hydrus-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.hydrus-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.hydrus-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=hydrus"
+      - "homepage.icon=hydrus.png"
+      - "homepage.href=http://hydrus.0040300.xyz/"
+      - "homepage.description=Booru web browser"
+    depends_on:
+      - hydrus-client
+    <<: *function
+
+
+  komf:
+    image: sndxr/komf:1.7.1
+    container_name: komf
+    #ports:
+    #  - "8085:8085"
+    labels:                
+      - "traefik.enable=true"
+      - "traefik.http.routers.komf-rtr.rule=Host(`komf.0040300.xyz`)"
+      - "traefik.http.routers.komf-rtr.tls=true"
+      - "traefik.http.services.komf-rtr.loadbalancer.server.port=8085"
+      - "traefik.http.routers.komf-rtr.entrypoints=websecure"
+      - "traefik.http.routers.komf-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.komf-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.komf-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=komf"
+      - "homepage.icon=komga.png"
+      - "homepage.href=http://komf.0040300.xyz/"
+      - "homepage.description=Metadata"
+      - "homepage.siteMonitor=http://komf:8085"
+    user: "1000:1000"
+    environment:
+      - TZ=${TIMEZONE}
+      - KOMF_KAVITA_BASE_URI=http://kavita:5000
+      - KOMF_KAVITA_API_KEY=${KAVITA_API_KEY}
+      - KOMF_LOG_LEVEL=INFO
+      # optional jvm options. Example config for low memory usage. Runs guaranteed cleanup up every 3600000ms(1hour)
+      - JAVA_TOOL_OPTIONS=-XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=compact -XX:ShenandoahGuaranteedGCInterval=3600000 -XX:TrimNativeHeapInterval=3600000
+    volumes:
+      - ${DOCKER_HOME}/komf:/config #path to directory with application.yml and database file
+    <<: *function
+
+  lanraragi:
+    image: difegue/lanraragi:v.0.9.60
+    container_name: lanraragi
+    ports:
+     - "3002:3000"
+    environment:
+      - TZ=${TIMEZONE}
+    labels:                
+      - "traefik.enable=true"
+      - "traefik.http.routers.lanraragi-rtr.rule=Host(`lanraragi.0040300.xyz`)"
+      - "traefik.http.routers.lanraragi-rtr.tls=true"
+      - "traefik.http.services.lanraragi-rtr.loadbalancer.server.port=3000"
+      - "traefik.http.routers.lanraragi-rtr.entrypoints=websecure"
+      - "traefik.http.routers.lanraragi-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.lanraragi-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.lanraragi-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=lanraragi"
+      - "homepage.icon=lanraragi.png"
+      - "homepage.href=http://lanraragi.0040300.xyz/"
+      - "homepage.description=Doujin Reader"
+      - "homepage.siteMonitor=http://lanraragi:3000"
+    volumes:
+      - ${HDD_1_A_HOME}/gallery-dl/doujin:/home/koyomi/lanraragi/content
+      - ${DOCKER_HOME}/lanraragi/thumb:/home/koyomi/lanraragi/thumb
+      - ${DOCKER_HOME}/lanraragi/database:/home/koyomi/lanraragi/database
+    <<: *function

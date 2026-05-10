@@ -1,0 +1,104 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: "no"
+  profiles: ["searchengine"]
+
+
+x-environment: &environment
+  PUID: 1000
+  PGID: 1000
+  TZ: ${TIMEZONE}
+
+
+services:
+  searxng-valkey:
+    container_name: searxng-valkey
+    image: docker.io/valkey/valkey:8-alpine3.23
+    command: valkey-server --save 30 1 --loglevel warning
+    labels:   
+      - "homepage.group=Home"
+      - "homepage.name=valkey"
+      - "homepage.icon=valkey.png"
+      - "homepage.description= In-memory Database for searxng "
+    volumes:
+      - valkey-data2:/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
+    <<: *function
+
+  searxng:
+    container_name: searxng
+    image: ghcr.io/searxng/searxng:2025.12.7-74ec225ad
+    # ports:
+    #   - "127.0.0.1:8080:8080"
+    labels:   
+      - "traefik.enable=true"
+      - "traefik.http.routers.searxng-rtr.rule=Host(`searxng.0040300.xyz`)"
+      - "traefik.http.routers.searxng-rtr.tls=true"
+      - "traefik.http.services.searxng-rtr.loadbalancer.server.port=8080"
+      - "traefik.http.routers.searxng-rtr.entrypoints=websecure"
+      - "traefik.http.routers.searxng-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.searxng-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.searxng-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Home"
+      - "homepage.name=searxng"
+      - "homepage.icon=searxng.png"
+      - "homepage.href=http://searxng.0040300.xyz/"
+      - "homepage.description= Selfhosted metasearch engine "
+      - "homepage.siteMonitor=http://searxng:8080"
+    volumes:
+      - ${DOCKER_HOME}/searxng:/etc/searxng:rw
+      - searxng-data:/var/cache/searxng:rw
+    environment:
+      - TZ=${TIMEZONE}
+      - SEARXNG_HOSTNAME=https://searxng.0040300.xyz
+      - SEARXNG_BASE_URL=https://${SEARXNG_HOSTNAME:-localhost}/
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
+    dns:
+      # - 172.13.0.27     # adguardhome dns
+      - 192.168.0.1
+    <<: *function
+
+  vivaldi:
+    image: kasmweb/vivaldi:1.18.0-rolling-daily
+    container_name: vivaldi
+    labels:   
+      - "traefik.enable=true"
+      - "traefik.http.routers.vivaldi-rtr.rule=Host(`vivaldi.0040300.xyz`)"
+      - "traefik.http.routers.vivaldi-rtr.tls=true"
+      - "traefik.http.services.vivaldi-rtr.loadbalancer.server.port=6901"
+      - "traefik.http.routers.vivaldi-rtr.entrypoints=websecure"
+      - "traefik.http.routers.vivaldi-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.vivaldi-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.vivaldi-rtr.tls.domains[0].sans=*.0040300.xyz"
+
+      # used for https backend with self-signed cert. docker label based serversTransport did not work
+      - "traefik.http.services.vivaldi-rtr.loadbalancer.server.scheme=https"
+      - "traefik.http.services.vivaldi-rtr.loadbalancer.serversTransport=selfsignedTransport@file"
+
+      - "homepage.group=Home"
+      - "homepage.name=vivaldi"
+      - "homepage.icon=vivaldi.png"
+      - "homepage.href=http://vivaldi.0040300.xyz/"
+      - "homepage.description= Web Browser "
+    shm_size: 4096m
+    dns:       # rm /home/kasm-user/.config/vivaldi/SingletonLock
+      - 192.168.0.11
+    environment:
+      - VNC_PW=${VD_PWD}
+    volumes:
+      - ${HDD_1_A_HOME}/Downloads/vivaldi:/home/kasm-user/Downloads
+      - ${DOCKER_HOME}/vivaldi:/home/kasm-user/.config
+    <<: *function
+
+volumes:
+  valkey-data2:
+  searxng-data:

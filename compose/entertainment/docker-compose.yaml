@@ -1,0 +1,230 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["entertainment"]
+
+x-environment: &environment
+  PUID: 1000
+  PGID: 1000
+  TZ: ${TIMEZONE}
+
+services:
+  jellyfin:
+    container_name: jellyfin
+    image: ghcr.io/jellyfin/jellyfin:10.11.5
+    #security_opt: # Required for Docker versions below 20.10.10, update Docker for long term solution. Source: https://docs.linuxserver.io/faq#jammy
+    #  - seccomp=unconfined
+    environment:
+      <<: *environment
+    volumes:
+      - ${DOCKER_HOME}/jellyfin:/config
+      - ${HDD_1_B_HOME}/storage/media:/data/media
+      - ${HDD_1_A_HOME}/xtream-download-manager:/data/xtream-download-manager
+      - ${HDD_2_B_HOME}/PC_desktop:/data/PC_desktop
+    devices:
+      - /dev/dri:/dev/dri
+    ports:
+      - 8096:8096          # unable to make client jellyfin app connect with domain so exposed http://192.168.0.11:8096
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jellyfin-rtr.rule=Host(`jellyfin.0040300.xyz`)"
+      - "traefik.http.routers.jellyfin-rtr.tls=true"
+      - "traefik.http.services.jellyfin-rtr.loadbalancer.server.port=8096"
+      - "traefik.http.routers.jellyfin-rtr.entrypoints=websecure"
+      - "traefik.http.routers.jellyfin-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.jellyfin-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.jellyfin-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Media"
+      - "homepage.name=Jellyfin"
+      - "homepage.icon=jellyfin.png"
+      - "homepage.href=http://jellyfin.0040300.xyz/"
+      - "homepage.description=Media server"
+      - "homepage.siteMonitor=http://jellyfin:8096"
+    <<: *function
+
+  navidrome:
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    user: 1000:1000
+    environment:
+      TZ: ${TIMEZONE}
+      # Optional: put your config options customization here. Examples:
+      ND_SCANSCHEDULE: 1h
+      ND_LOGLEVEL: info
+      ND_SESSIONTIMEOUT: 24h
+    volumes:
+      - ${DOCKER_HOME}/navidrome:/data
+      - ${ROOT_HOME}/music:/music:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.navidrome-rtr.rule=Host(`navidrome.0040300.xyz`)"
+      - "traefik.http.routers.navidrome-rtr.tls=true"
+      - "traefik.http.services.navidrome-rtr.loadbalancer.server.port=4533"
+      - "traefik.http.routers.navidrome-rtr.entrypoints=websecure"
+      - "traefik.http.routers.navidrome-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.navidrome-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.navidrome-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Media"
+      - "homepage.name=navidrome"
+      - "homepage.icon=navidrome.png"
+      - "homepage.href=http://navidrome.0040300.xyz/"
+      - "homepage.description=Personal Music Collection"
+      - "homepage.siteMonitor=http://navidrome:4533"
+    <<: *function
+
+  # jellyseerr:           # https://github.com/fallenbagel/jellyseerr/issues/1195
+  #   image: fallenbagel/jellyseerr:2.7.3
+  #   container_name: jellyseerr
+  #   environment:        
+  #     - LOG_LEVEL=debug
+  #     - TZ=${TIMEZONE}
+  #     - PORT=5055 #optional
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.jellyseerr-rtr.rule=Host(`jellyseerr.0040300.xyz`)"
+  #     - "traefik.http.routers.jellyseerr-rtr.tls=true"
+  #     - "traefik.http.services.jellyseerr-rtr.loadbalancer.server.port=5055"
+  #     - "traefik.http.routers.jellyseerr-rtr.entrypoints=websecure"
+  #     - "traefik.http.routers.jellyseerr-rtr.tls.certresolver=cloudflare"
+  #     - "traefik.http.routers.jellyseerr-rtr.tls.domains[0].main=0040300.xyz"
+  #     - "traefik.http.routers.jellyseerr-rtr.tls.domains[0].sans=*.0040300.xyz"
+  #     - "homepage.group=Tools"
+  #     - "homepage.name=jellyseerr"
+  #     - "homepage.icon=jellyseerr.png"
+  #     - "homepage.href=http://jellyseerr.0040300.xyz/"
+  #     - "homepage.description=Request manager for sonar/radar"
+  #     - "homepage.siteMonitor=http://jellyseerr:5055"
+  #   #ports:
+  #   #  - 5055:5055
+  #   volumes:
+  #     - ${DOCKER_HOME}/jellyseerr:/app/config
+  #   <<: *function
+
+
+  seerr:
+    image: ghcr.io/seerr-team/seerr:v3.1.0
+    init: true
+    container_name: seerr
+    environment:
+      - LOG_LEVEL=debug
+      - TZ=${TIMEZONE}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.seerr-rtr.rule=Host(`seerr.0040300.xyz`)"
+      - "traefik.http.routers.seerr-rtr.tls=true"
+      - "traefik.http.services.seerr-rtr.loadbalancer.server.port=5055"
+      - "traefik.http.routers.seerr-rtr.entrypoints=websecure"
+      - "traefik.http.routers.seerr-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.seerr-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.seerr-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=seerr"
+      - "homepage.icon=seerr.png"
+      - "homepage.href=http://seerr.0040300.xyz/"
+      - "homepage.description=Request manager for sonar/radar"
+      - "homepage.siteMonitor=http://seerr:5055"
+    volumes:
+      - ${DOCKER_HOME}/seerr:/app/config
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/status || exit 1
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+      retries: 3
+    <<: *function
+
+
+  listsync:
+    image: ghcr.io/woahai321/list-sync:0.6.5
+    container_name: listsync
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.listsync-rtr.rule=Host(`listsync.0040300.xyz`)"
+      - "traefik.http.routers.listsync-rtr.tls=true"
+      - "traefik.http.services.listsync-rtr.loadbalancer.server.port=3222"
+      - "traefik.http.routers.listsync-rtr.entrypoints=websecure"
+      - "traefik.http.routers.listsync-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.listsync-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.listsync-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=listsync"
+      - "homepage.icon=listsync.png"
+      - "homepage.description=Import lists into jellyseerr "
+      - "homepage.href=http://listsync.0040300.xyz/"
+      - "homepage.siteMonitor=http://listsync:3222"
+    # ports:
+    #   # Frontend (Nuxt 3 Dashboard)
+    #   - "3222:3222"
+    #   # Backend API (FastAPI)
+    #   - "4222:4222"
+    environment:         # envs not getting set through ENV. you have to manually change in the UI
+      - TZ=${TIMEZONE}
+      - "OVERSEERR_URL=http://seerr:5055"
+      - "OVERSEERR_API_KEY=${OVERSEERR_API_KEY}"
+      - "OVERSEERR_USER_ID=3"
+      #- OVERSEERR_USER_ID=${OVERSEERR_USER_ID:-1}
+      - SYNC_INTERVAL=${SYNC_INTERVAL:-1}
+      - RUNNING_IN_DOCKER=true
+      - AUTOMATED_MODE=true
+      - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID}          # trakt client secret not needed
+      - OVERSEERR_4K=${OVERSEERR_4K:-false}
+      - "IMDB_LISTS=${IMDB_LISTS}"
+      #- TRAKT_LISTS=${TRAKT_LISTS}
+      #- "LETTERBOXD_LISTS=${LETTERBOXD_LISTS}"
+    volumes:
+      - ${DOCKER_HOME}/listsync:/usr/src/app/data
+    depends_on:
+      - seerr
+    <<: *function
+
+  # stash:
+  #   image: stashapp/stash:latest              # need to enable basic auth
+  #   container_name: stash
+  #   hostname: stash
+  #   ## If you intend to use stash's DLNA functionality uncomment the below network mode and comment out the above ports section
+  #   # network_mode: host
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-file: "10"
+  #       max-size: "2m"
+  #   command: stash --config /config/config.yml
+  #   environment:
+  #     - STASH_STASH=/data/
+  #     - STASH_GENERATED=/generated/
+  #     - STASH_METADATA=/metadata/
+  #     - STASH_CACHE=/cache/
+  #     - STASH_PORT=9999
+  #     - USER=user
+  #   user: 1000:1000    # user support is pending in application so this workaround for non root
+  #   #  manually set dangerous_allow_public_without_auth: "true" in config.yml under config directory before launching container
+  #   # after that open app go to security,create user and also directory
+  #   # then under library -> /data direcoty to be set and under tasks -> scan should be done to discover
+  #   volumes:
+  #     - /etc/localtime:/etc/localtime:ro
+  #     - ${DOCKER_HOME}/stash/config:/config
+  #     - /home/subash/mediablog:/data
+  #     - ${DOCKER_HOME}/stash/metadata:/metadata
+  #     - ${DOCKER_HOME}/stash/cache:/cache
+  #     - ${DOCKER_HOME}/stash/generated:/generated
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.stash-rtr.rule=Host(`stash.0040300.xyz`)"
+  #     - "traefik.http.routers.stash-rtr.tls=true"
+  #     - "traefik.http.services.stash-rtr.loadbalancer.server.port=9999"
+  #     - "traefik.http.routers.stash-rtr.entrypoints=websecure"
+  #     - "homepage.group=Home"
+  #     - "homepage.name=stash"
+  #     - "homepage.icon=stash.png"
+  #     - "homepage.href=http://stash.0040300.xyz/"
+  #     - "homepage.description=Personal Stash Collection"
+  #     - "homepage.siteMonitor=http://stash:9999"
+  #   networks:
+  #     home_net:
+  #       ipv4_address: 172.13.0.9
+  #   depends_on:
+  #     - traefik
+  #   restart: unless-stopped
+  #   #cap_add:                            # use this if you face mount/directory issues
+  #   #  - SYS_ADMIN

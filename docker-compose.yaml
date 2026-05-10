@@ -1,0 +1,81 @@
+# docker compose --env-file compose.env -f docker-compose.yaml up -d
+# docker compose --env-file compose.env down
+# docker compose config 
+# docker compose --profile "*" up -d
+# docker compose --profile "*" down
+
+# References:
+# https://dev.to/shrsv/mastering-docker-compose-advanced-patterns-for-on-prem-saas-deployments-boh
+
+name: homeden
+
+networks:
+  home_net:
+    name: home_net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.13.0.0/16
+#  host:
+#    name: host
+#    external: true
+
+# available homepage groups are Media, Home, Tools, Monitor, System, Containers
+
+# Ensure to change the router name manually as variable substitution does not work with key
+
+
+include:
+  - path: ./compose/arr-stack/docker-compose.yaml
+    env_file:
+      - ./.env
+      - ./compose/arr-stack/.env
+  - path: ./compose/backup/docker-compose.yaml
+    env_file:
+      - ./.env
+      - ./compose/backup/.env
+  - path: ./compose/documents/docker-compose.yaml
+    env_file: ./.env
+  - path: ./compose/downloader/docker-compose.yaml
+    env_file: ./.env
+  - path: ./compose/entertainment/docker-compose.yaml
+    env_file:
+      - ./.env
+      - ./compose/entertainment/.env
+  - path: ./compose/filemanagement/docker-compose.yaml
+    env_file: ./.env
+  - path: ./compose/manga/docker-compose.yaml
+    env_file:
+      - ./.env
+      - ./compose/manga/.env
+  - path: ./compose/ml-model/docker-compose.yaml
+    env_file: ./.env
+  - path: ./compose/monitoring/docker-compose.yaml
+    env_file:
+      - ./.env
+      - ./compose/monitoring/.env
+  - path: ./compose/network/docker-compose.yaml
+    env_file:
+      - ./.env
+      - ./compose/network/.env
+  - path: ./compose/personal/docker-compose.yaml
+    env_file:
+      - ./.env
+      - ./compose/personal/.env
+  - path: ./compose/sourcecode/docker-compose.yaml
+    env_file:
+      - ./.env
+      - ./compose/sourcecode/.env
+  - path: ./compose/utility/docker-compose.yaml
+    env_file: ./.env
+  - path: ./compose/searchengine/docker-compose.yaml
+    env_file:
+      - ./.env
+      - ./compose/searchengine/.env
+  - path: ./compose/tracking/docker-compose.yaml
+    env_file: ./.env
+
+
+
+
+

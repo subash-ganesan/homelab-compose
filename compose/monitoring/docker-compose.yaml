@@ -1,0 +1,226 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["monitoring"]
+
+
+services:
+  beszel:
+    image: ghcr.io/henrygd/beszel/beszel:0.16.0
+    container_name: beszel          # another promising monitoring stack but high mem/cpu usage https://github.com/ruanbekker/docker-monitoring-stack-gpnc
+    extra_hosts:  
+      - host.docker.internal:host-gateway
+    ports:
+      - 8090:8090
+    volumes:
+      - ${DOCKER_HOME}/beszel/beszel_data:/beszel_data
+      - ${DOCKER_HOME}/beszel/beszel_socket:/beszel_socket
+    environment:
+      - TZ=${TIMEZONE}  
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.beszel-rtr.rule=Host(`beszel.0040300.xyz`)"
+      - "traefik.http.routers.beszel-rtr.tls=true"
+      - "traefik.http.services.beszel-rtr.loadbalancer.server.port=8090"
+      - "traefik.http.routers.beszel-rtr.entrypoints=websecure"
+      - "traefik.http.routers.beszel-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.beszel-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.beszel-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=beszel"
+      - "homepage.icon=beszel.png"
+      - "homepage.href=http://beszel.0040300.xyz/"
+      - "homepage.description=Monitoring"
+      - "homepage.siteMonitor=http://beszel:8090"
+      - "homepage.widget.type=beszel"
+      - "homepage.widget.url=http://beszel:8090"
+      - "homepage.widget.username=${BESZEL_LOGIN_USERNAME}"
+      - "homepage.widget.password=${BESZEL_LOGIN_PASSWORD}"
+      - "homepage.widget.systemId=homeden"
+      - "homepage.widget.version=2"
+    <<: *function
+
+
+  beszel-agent:
+    image: ghcr.io/henrygd/beszel/beszel-agent:0.16.0-alpine
+    container_name: "beszel-agent"
+    security_opt:
+      - apparmor:unconfined
+    cap_add:
+      - SYS_RAWIO # required for S.M.A.R.T. data
+      - SYS_ADMIN # required for NVMe S.M.A.R.T. data
+    devices:
+      - /dev/sda:/dev/sda
+      - /dev/sdb:/dev/sdb
+    environment:
+      TZ: ${TIMEZONE}  
+      PORT: 45876       # generate the below key from the beszel web console by giving Host/IP as host.docker.internal OR just follow official docs
+      KEY: "${BESZEL_KEY}"
+      TOKEN: "${BESZEL_TOKEN}"
+      LISTEN: /beszel_socket/beszel.sock
+      HUB_URL: http://localhost:8090
+    labels:
+      - "homepage.group=Tools"
+      - "homepage.name=beszel-agent"
+      - "homepage.icon=beszel.png"
+      - "homepage.description=Monitoring Agent"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
+      - ${DOCKER_HOME}/beszel/beszel_socket:/beszel_socket
+      - ${DOCKER_HOME}/beszel/beszel_agent_data:/var/lib/beszel-agent
+      # monitor other disks / partitions by mounting a folder in /extra-filesystems
+      # - /mnt/disk/.beszel:/extra-filesystems/sda1:ro
+      - ${HDD_1_A_HOME}:/extra-filesystems/hdd-1-a:ro
+      - ${HDD_1_B_HOME}:/extra-filesystems/hdd-1-b:ro
+    network_mode: host
+    restart: unless-stopped
+    profiles: ["monitoring"]
+
+  apprise:
+    #env_file: .env
+    image: caronc/apprise:1.2.1
+    container_name: apprise
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.apprise-rtr.rule=Host(`apprise.0040300.xyz`)"
+      - "traefik.http.routers.apprise-rtr.tls=true"
+      - "traefik.http.services.apprise-rtr.loadbalancer.server.port=8000"
+      - "traefik.http.routers.apprise-rtr.entrypoints=websecure"
+      - "traefik.http.routers.apprise-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.apprise-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.apprise-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=apprise"
+      - "homepage.icon=apprise.png"
+      - "homepage.href=http://apprise.0040300.xyz/"
+      - "homepage.description=Send Notification to any service"
+      - "homepage.siteMonitor=http://apprise:8000"
+    environment:
+      - TZ=${TIMEZONE} 
+    volumes:
+      - ${DOCKER_HOME}/apprise:/config
+    <<: *function
+
+
+  portainer:
+    image: portainer/portainer-ce:2.21.4       # go here https://www.portainer.io/take-3 for free business edition license
+    container_name: portainer                         # password needs to be 12 characters long so used my own, check env
+    volumes:
+      - ${DOCKER_HOME}/portainer:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=${TIMEZONE}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer-rtr.rule=Host(`portainer.0040300.xyz`)"
+      - "traefik.http.routers.portainer-rtr.tls=true"
+      - "traefik.http.services.portainer-rtr.loadbalancer.server.port=9000"
+      - "traefik.http.routers.portainer-rtr.entrypoints=websecure"
+      - "traefik.http.routers.portainer-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.portainer-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.portainer-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Monitor"
+      - "homepage.name=portainer"
+      - "homepage.icon=portainer.png"
+      - "homepage.href=http://portainer.0040300.xyz/"
+      - "homepage.description=Check Docker Continers"
+      - "homepage.siteMonitor=http://portainer:9000"
+    <<: *function
+
+  whatsupdocker:              # https://getwud.github.io/wud/#/configuration/watchers/
+    image: ghcr.io/getwud/wud:8.1.1
+    container_name: wud
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:        
+      - "traefik.enable=true"
+      - "traefik.http.routers.whatsupdocker-rtr.rule=Host(`wud.0040300.xyz`)"
+      - "traefik.http.routers.whatsupdocker-rtr.tls=true"
+      - "traefik.http.services.whatsupdocker-rtr.loadbalancer.server.port=3000"
+      - "traefik.http.routers.whatsupdocker-rtr.entrypoints=websecure"
+      - "traefik.http.routers.whatsupdocker-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.whatsupdocker-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.whatsupdocker-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=whatsupdocker"
+      - "homepage.icon=whats-up-docker.png"
+      - "homepage.href=http://wud.0040300.xyz/"
+      - "homepage.description=Docker Container updater"
+      - "homepage.siteMonitor=http://whatsupdocker:3000"
+    environment:
+      - TZ=${TIMEZONE} 
+      - WUD_WATCHER_LOCAL_CRON=0 1 * * *
+    <<: *function
+
+
+  cupdate:
+    image: ghcr.io/alexgustafsson/cupdate:0.22.2
+    container_name: cupdate           # docker label based config like traefik for tag resolution https://github.com/AlexGustafsson/cupdate/blob/main/docs/config.md
+    environment:
+      TZ: ${TIMEZONE} 
+      CUPDATE_DOCKER_HOST: unix:///var/run/docker.sock
+      CUPDATE_CACHE_PATH: /var/run/data/cachev1.boltdb
+      CUPDATE_DB_PATH: /var/run/data/dbv1.sqlite
+      CUPDATE_LOGOS_PATH: /var/run/data/logos
+
+      # CUPDATE_LOG_LEVEL: debug
+      # CUPDATE_PROCESSING_INTERVAL: 15m
+
+    # group_add:
+    #   - "988"          # add docker group to allow socket access: getent group docker | cut -d: -f3
+    labels:        
+      - "traefik.enable=true"
+      - "traefik.http.routers.cupdate-rtr.rule=Host(`cupdate.0040300.xyz`)"
+      - "traefik.http.routers.cupdate-rtr.tls=true"
+      - "traefik.http.services.cupdate-rtr.loadbalancer.server.port=8080"
+      - "traefik.http.routers.cupdate-rtr.entrypoints=websecure"
+      - "traefik.http.routers.cupdate-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.cupdate-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.cupdate-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=cupdate"
+      - "homepage.icon=whats-up-docker.png"
+      - "homepage.href=http://cupdate.0040300.xyz/"
+      - "homepage.description=Docker Container updater"
+      - "homepage.siteMonitor=http://cupdate:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${DOCKER_HOME}/cupdate:/var/run/data
+      - target: /tmp
+        type: tmpfs
+    <<: *function
+
+  myspeed:
+    image: germannewsmaker/myspeed:1.0.9
+    container_name: myspeed
+    labels:        
+      - "traefik.enable=true"
+      - "traefik.http.routers.myspeed-rtr.rule=Host(`myspeed.0040300.xyz`)"
+      - "traefik.http.routers.myspeed-rtr.tls=true"
+      - "traefik.http.services.myspeed-rtr.loadbalancer.server.port=5216"
+      - "traefik.http.routers.myspeed-rtr.entrypoints=websecure"
+      - "traefik.http.routers.myspeed-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.myspeed-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.myspeed-rtr.tls.domains[0].sans=*.0040300.xyz"
+  # https://github.com/openspeedtest/Speed-Test/issues/4#issuecomment-1229157193
+      # - "traefik.http.middlewares.limit.buffering.maxRequestBodyBytes=10000000000"
+      # - "traefik.http.routers.myspeed-rtr.middlewares=limit"
+      - "homepage.group=Tools"
+      - "homepage.name=myspeed"
+      - "homepage.icon=myspeed.png"
+      - "homepage.href=http://myspeed.0040300.xyz/"
+      - "homepage.description=Check Internet Speed"
+      - "homepage.siteMonitor=http://myspeed:5216"
+      - "homepage.widget.type=myspeed"
+      - "homepage.widget.url=http://myspeed:5216"
+    volumes:
+      - myspeed:/myspeed/data
+    <<: *function
+
+
+
+volumes:
+  myspeed:

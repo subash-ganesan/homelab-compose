@@ -1,0 +1,93 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["documents"]
+
+
+
+services:
+  calibre-web-automated:
+    image: ghcr.io/crocodilestick/calibre-web-automated:V3.1.4
+    container_name: calibre-web-automated
+    environment:
+      - TZ=${TIMEZONE} 
+      # Only change these if you know what you're doing
+      - PUID=1000
+      - PGID=1000
+      # Edit to match your current timezone https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.calibre-web-rtr.rule=Host(`calibre-web.0040300.xyz`)"
+      - "traefik.http.routers.calibre-web-rtr.tls=true"
+      - "traefik.http.services.calibre-web-rtr.loadbalancer.server.port=8083"
+      - "traefik.http.routers.calibre-web-rtr.entrypoints=websecure"
+      - "traefik.http.routers.calibre-web-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.calibre-web-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.calibre-web-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=calibre-web"
+      - "homepage.icon=calibre-web.png"
+      - "homepage.href=http://calibre-web.0040300.xyz/"
+      - "homepage.description=calibre-web Document Manager"
+      - "homepage.siteMonitor=http://calibre-web-automated:8083"
+    volumes:
+      # CW users migrating should stop their existing CW instance, make a copy of the config folder, and bind that here to carry over all of their user settings ect.
+      - ${DOCKER_HOME}/calibre:/config
+      # This is an ingest dir, NOT a library one. Anything added here will be automatically added to your library according to the settings you have configured in CWA Settings page. All files placed here are REMOVED AFTER PROCESSING
+      - ${HDD_1_A_HOME}/literature-1:/cwa-book-ingest
+      # If you don't have an existing library, CWA will automatically create one at the bind provided here
+      - ${HDD_1_B_HOME}/calibre:/calibre-library
+    #ports:
+      # Change the first number to change the port you want to access the Web UI, not the second
+      #- 8083:8083
+    <<: *function
+
+  calibre-web-automated-book-downloader:
+    container_name: calibre-web-automated-book-downloader
+    image: ghcr.io/calibrain/calibre-web-automated-book-downloader:0.3.4
+    environment:
+      TZ: ${TIMEZONE} 
+      FLASK_PORT: 8084
+      FLASK_DEBUG: false
+      CLOUDFLARE_PROXY_URL: http://cloudflarebypassforscraping:8000
+      INGEST_DIR: /cwa-book-ingest
+      BOOK_LANGUAGE: en
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.calibre-downloader-rtr.rule=Host(`calibre-downloader.0040300.xyz`)"
+      - "traefik.http.routers.calibre-downloader-rtr.tls=true"
+      - "traefik.http.services.calibre-downloader-rtr.loadbalancer.server.port=8084"
+      - "traefik.http.routers.calibre-downloader-rtr.entrypoints=websecure"
+      - "traefik.http.routers.calibre-downloader-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.calibre-downloader-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.calibre-downloader-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=calibre-web"
+      - "homepage.icon=calibre-web.png"
+      - "homepage.href=http://calibre-downloader.0040300.xyz/"
+      - "homepage.description=calibre-web downloader for ebooks"
+      - "homepage.siteMonitor=http://calibre-web-automated-book-downloader:8084"
+    #ports:
+    #  - 8084:8084
+    # Uncomment the following lines if you want to enable healthcheck
+    #healthcheck:
+    #  test: ["CMD", "curl", "-f", "http://localhost:8084/request/api/status"]
+    #  interval: 30s
+    #  timeout: 30s
+    #  retries: 3
+    #  start_period: 5s
+    volumes:
+    # This is where the books will be downloaded to, usually it would be
+    # the same as whatever you gave in "calibre-web-automated"
+      - ${HDD_1_A_HOME}/literature-1:${INGEST_DIR:-/cwa-book-ingest}
+    depends_on:
+      - cloudflarebypassforscraping
+    <<: *function
+
+  cloudflarebypassforscraping:
+    container_name: cloudflarebypassforscraping
+    image: ghcr.io/sarperavci/cloudflarebypassforscraping:latest
+    environment:
+      - TZ=${TIMEZONE} 
+    <<: *function

@@ -1,0 +1,37 @@
+---
+# For configuration options and examples, please see:
+# https://gethomepage.dev/configs/settings
+
+title: "Homeden"
+
+color: slate
+
+useEqualHeights: true
+
+showStats: true    
+
+layout:
+  - Media:
+      header: true
+      style: row
+      columns: 4
+  - Home:
+      header: true
+      style: row
+      columns: 4
+  - Tools:
+      header: true
+      style: column
+      columns: 4
+  - Monitor:
+      header: true
+      style: column
+      columns: 4
+  - System:
+      header: true
+      style: row
+      columns: 4
+  - Containers:
+      header: true
+      style: row
+      columns: 4

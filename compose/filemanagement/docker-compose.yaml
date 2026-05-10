@@ -1,0 +1,97 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["filemanagement"]
+
+x-environment: &environment
+  PUID: 1000
+  PGID: 1000
+  TZ: ${TIMEZONE}
+
+
+ # dont use $(id -u) as the value here, it picks some other docker build user
+ # the default username and password is admin. change it after first login
+services:
+  filebrowser:
+    image: filebrowser/filebrowser:v2.55.0
+    container_name: filebrowser              
+    environment:
+      <<: *environment
+    volumes:
+      - ${DOCKER_HOME}/filebrowser/database:/database
+      - ${DOCKER_HOME}/filebrowser/config:/config
+      - ${ROOT_HOME}:/srv               # location to server files you want
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.filebrowser-rtr.rule=Host(`filebrowser.0040300.xyz`)"
+      - "traefik.http.routers.filebrowser-rtr.tls=true"
+      - "traefik.http.services.filebrowser-rtr.loadbalancer.server.port=80"
+      - "traefik.http.routers.filebrowser-rtr.entrypoints=websecure"
+      - "traefik.http.routers.filebrowser-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.filebrowser-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.filebrowser-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=System"
+      - "homepage.name=filebrowser"
+      - "homepage.icon=filebrowser.png"
+      - "homepage.href=http://filebrowser.0040300.xyz/"
+      - "homepage.description=Personal Stash Collection"
+      - "homepage.siteMonitor=http://filebrowser:80"
+    <<: *function
+
+  cloudcmd:
+    container_name: cloudcmd
+    user: 1000:1000
+    volumes:
+      - ${DOCKER_HOME}/cloudcmd:/root
+      - ${ROOT_HOME}:/mnt/fs
+    image: ghcr.io/coderaiser/cloudcmd:18.5.2-alpine
+    environment:
+      - TZ=${TIMEZONE}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cloudcmd-rtr.rule=Host(`cloudcmd.0040300.xyz`)"
+      - "traefik.http.routers.cloudcmd-rtr.tls=true"
+      - "traefik.http.services.cloudcmd-rtr.loadbalancer.server.port=8000"
+      - "traefik.http.routers.cloudcmd-rtr.entrypoints=websecure"
+      - "traefik.http.routers.cloudcmd-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.cloudcmd-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.cloudcmd-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=cloudcmd"
+      - "homepage.icon=cloudcmd.png"
+      - "homepage.href=http://cloudcmd.0040300.xyz/"
+      - "homepage.description=Filebrowser"
+      - "homepage.siteMonitor=http://cloudcmd:8000"
+    <<: *function
+
+  filestash:
+    container_name: filestash
+    user: 1000:1000
+    volumes:     # set environment variables for gdrive
+      - ${DOCKER_HOME}/filestash:/app/data/state/
+      - ${ROOT_HOME}:/mnt/fs
+    image: machines/filestash:latest
+    environment:           # for admin -> https://filestash.0040300.xyz/admin
+    - TZ=${TIMEZONE}
+    - APPLICATION_URL=
+    - CANARY=true
+    #- OFFICE_URL=http://wopi_server:9980
+    #- OFFICE_FILESTASH_URL=http://app:8334
+    #- OFFICE_REWRITE_URL=http://127.0.0.1:9980
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.filestash-rtr.rule=Host(`filestash.0040300.xyz`)"
+      - "traefik.http.routers.filestash-rtr.tls=true"
+      - "traefik.http.services.filestash-rtr.loadbalancer.server.port=8334"
+      - "traefik.http.routers.filestash-rtr.entrypoints=websecure"
+      - "traefik.http.routers.filestash-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.filestash-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.filestash-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=filestash"
+      - "homepage.icon=filestash.png"
+      - "homepage.href=http://filestash.0040300.xyz/"
+      - "homepage.description=Multi Filebrowser"
+      - "homepage.siteMonitor=http://filestash:8334"
+    <<: *function

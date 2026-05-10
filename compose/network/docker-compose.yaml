@@ -1,0 +1,207 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["network"]
+
+
+services:
+  adguardhome:     #sudo systemctl stop systemd-resolved.service    #to free up port 53  # remember to delete existing /etc/resolv.conf # it is possible to add multiple nameservers on VM sudo vi /etc/resolv.conf -> nameserver 127.0.0.1
+    container_name: adguardhome
+    image: adguard/adguardhome:v0.107.62
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - TZ=${TIMEZONE}
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.adguardhome-rtr.entrypoints: websecure
+      traefik.http.routers.adguardhome-rtr.tls: "true"
+      traefik.http.routers.adguardhome-rtr.rule: Host(`adguardhome.0040300.xyz`)
+      traefik.http.routers.adguardhome-rtr.tls.certresolver: "cloudflare"
+      traefik.http.routers.adguardhome-rtr.tls.domains[0].main: "0040300.xyz"
+      traefik.http.routers.adguardhome-rtr.tls.domains[0].sans: "*.0040300.xyz"
+
+      # traefik.http.services.adguardhome-svc.loadbalancer.server.port: "3000"      # dont use this if using server.url label
+      traefik.http.services.adguardhome-svc.loadbalancer.server.url: "http://192.168.0.11:3000"   # change adguard webui port from 80 in {home}/adguard/conf/AdGuardHome.yaml
+
+      homepage.group: Home
+      homepage.name: adguardhome
+      homepage.icon: adguard-home.png
+      homepage.href: http://adguardhome.0040300.xyz/
+      homepage.description: "AdBlocker for Home"
+      homepage.siteMonitor: http://192.168.0.11:3000
+      homepage.widget.type: adguard
+      homepage.widget.url: http://192.168.0.11:3000
+      homepage.widget.username: ${GENERAL_USERNAME}
+      homepage.widget.password: ${GENERAL_PASSWORD}
+
+    network_mode: host       # using this instead of below section of ports 
+    # ports:
+    #   - 192.168.0.11:53:53/tcp   #plain DNS   #bind on private ip interface alone like 192.168.0.5:53:53
+    #   - 192.168.0.11:53:53/udp   #plain DNS
+    #   - 127.0.0.1:53:53/tcp
+    #   - 127.0.0.1:53:53/udp
+   
+#      - 67:67/udp   #DHCP
+#      - 68:68/tcp   #DHCP
+#      - 68:68/udp   #DHCP
+#      - 80:80/tcp       # WebInterface
+#      - 443:443/tcp     #DNSoHTTPS
+#      - 443:443/udp     #DNSoHTTPS
+#      - 853:853/tcp     #DNSoTLS
+#      - 3000:3000/tcp   #Dashboard API
+#      - 784:784/udp    #DNSoQUIC
+#      - 853:853/udp    #DNSoQUIC
+#      - 8853:8853/udp  #DNSoQUIC
+#      - 5443:5443/tcp  #DNSCrypt
+#      - 5443:5443/udp  #DNSCrypt
+    volumes:
+      - ${DOCKER_HOME}/adguard/conf:/opt/adguardhome/conf
+      - ${DOCKER_HOME}/adguard/work:/opt/adguardhome/work
+      - ${DOCKER_HOME}/adguard/certs:/opt/adguardhome/certs
+    # did not use depends_on since this container is needed for DNS resolution for whole network/server
+
+    # networks:
+    #   home_net:
+    #     ipv4_address: 172.13.0.27
+
+    restart: unless-stopped
+    profiles: ["network"]
+
+  traefik:
+    image: traefik:v3.6.1
+    container_name: traefik
+    ports:
+      - 80:80
+      - 443:443
+      # -- (Optional) Enable Dashboard, don't do in production
+      - 8080:8080
+    volumes:
+      - ${DOCKER_HOME}/traefik/config/traefik.yaml:/etc/traefik/traefik.yaml
+      - ${DOCKER_HOME}/traefik/certs:/etc/traefik/certs
+      - ${DOCKER_HOME}/traefik/letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - TZ=${TIMEZONE}
+      - CF_DNS_API_TOKEN=${CF_API_TOKEN}
+    labels:
+      - "homepage.group=System"
+      - "homepage.name=traefik"
+      - "homepage.icon=traefik.png"
+      - "homepage.href=http://traefik.0040300.xyz/"
+      - "homepage.description=Nginx Proxy server"
+      - "homepage.siteMonitor=http://traefik:8080"
+      - "homepage.widget.type=traefik"
+      - "homepage.widget.url=http://traefik:8080"
+      #- "autoheal=true"
+      - "traefik.enable=true"
+      # HTTP-to-HTTPS Redirect
+#      - "traefik.http.routers.http-catchall.entrypoints=http"
+#      - "traefik.http.routers.http-catchall.rule=HostRegexp(`{host:.+}`)"
+#      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+#      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      # HTTP Routers
+      - "traefik.http.routers.traefik-rtr.entrypoints=websecure"
+      # - "traefik.http.routers.traefik-rtr.rule=Host(`traefik.homeden.com`)"
+      - "traefik.http.routers.traefik-rtr.rule=Host(`traefik.0040300.xyz`)"
+      - "traefik.http.routers.traefik-rtr.tls=true"
+      ## Services - API
+      - "traefik.http.routers.traefik-rtr.service=api@internal"
+#      - "traefik.http.services.traefik-svc.loadbalancer.server.port=8080"
+ 
+      # Cloudflare
+      - "traefik.http.routers.traefik-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.traefik-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.traefik-rtr.tls.domains[0].sans=*.0040300.xyz"
+
+      ## Healthcheck/ping
+      #- "traefik.http.routers.ping.rule=Host(`traefik.$DOMAINNAME_CLOUD_SERVER`) && Path(`/ping`)"
+      #- "traefik.http.routers.ping.tls=true"
+      #- "traefik.http.routers.ping.service=ping@internal"
+      ## Middlewares
+      #- "traefik.http.routers.traefik-rtr.middlewares=chain-no-auth@file" # For No Authentication
+      #- "traefik.http.routers.traefik-rtr.middlewares=chain-basic-auth@file" # For Basic HTTP Authentication
+#      - "traefik.http.routers.traefik-rtr.middlewares=chain-oauth@file" # For Google OAuth
+      #- "traefik.http.routers.traefik-rtr.middlewares=chain-authelia@file" # For Authelia Authentication
+    privileged: true
+    <<: *function
+
+  homepage:      # https://gethomepage.dev/widgets/ for widgets
+    container_name: homepage        # homepage takes over 5 mins to start
+    image: ghcr.io/gethomepage/homepage:v1.3.2           # remember to copy over docker.yaml, settings.yaml and widgets.yaml
+    environment:
+      - PUID=1000
+      - PGID=988                # when you need access to the docker socket, use docker group id, not 1000
+      - HOMEPAGE_ALLOWED_HOSTS=homepage.0040300.xyz
+      - TZ=${TIMEZONE}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro # (optional) For docker integrations
+      - ${DOCKER_HOME}/homepage/config:/app/config # Make sure your local config directory exists
+      - ${DOCKER_HOME}/homepage/icons:/app/public/icons
+    labels:          # icons can be found here https://github.com/walkxcode/dashboard-icons/tree/main
+      - "traefik.enable=true"
+      - "traefik.http.routers.homepage-rtr.rule=Host(`homepage.0040300.xyz`)"
+      - "traefik.http.routers.homepage-rtr.tls=true"
+      - "traefik.http.services.homepage-rtr.loadbalancer.server.port=3000"
+      - "traefik.http.routers.homepage-rtr.entrypoints=websecure"
+      - "traefik.http.routers.homepage-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.homepage-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.homepage-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Home"
+      - "homepage.name=homepage"
+      - "homepage.icon=homepage.png"
+      - "homepage.href=http://homepage.0040300.xyz/"
+      - "homepage.description=Dashboard for Home"
+      - "homepage.siteMonitor=http://homepage:3000"
+    <<: *function
+
+#  tailscale:
+#     container_name: tailscale
+#     hostname: tailscale-home
+#     image: tailscale/tailscale:stable
+#     volumes:
+#       - ${DOCKER_HOME}/tailscale:/var/lib # State data will be stored in this directory
+#       - /dev/net/tun:/dev/net/tun # Required for tailscale to work
+# #    cap_add: # Required for tailscale to work #gives grained control of feature capabilities without opening up with privileged=true
+# #      - NET_ADMIN
+# #      - NET_RAW
+#     environment:
+#       - TS_AUTHKEY=${TS_AUTHKEY}
+#       - TS_STATE_DIR="/var/lib/tailscale"    # This gives us a persistent entry in TS Machines, rather than Epehmeral
+#       - TS_USERSPACE=0
+#       - TS_ROUTES=192.168.0.0/24
+#     privileged: true       # will ignore capabilities cap_add and cap_drop completely
+#     restart: unless-stopped
+#     network_mode: "host"
+
+
+  # gluetun:                  # https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/protonvpn.md#vpn-server-port-forwarding
+  #   image: qmcgaw/gluetun
+  #   container_name: gluetun
+  #   cap_add:
+  #     - NET_ADMIN
+  #   devices:
+  #     - /dev/net/tun:/dev/net/tun
+  #   environment:
+  #     - VPN_SERVICE_PROVIDER=protonvpn
+  #     - OPENVPN_USER=${OPENVPN_USER}
+  #     - OPENVPN_PASSWORD=${OPENVPN_PASSWORD}
+  #     #- SERVER_COUNTRIES=Netherlands,Japan
+  #     - FREE_ONLY=on
+  #     #- STREAM_ONLY=on
+  #     - HTTPPROXY=on           # in prowlar use this service as http proxy with port 8888
+  #     - HTTPPROXY_LOG=on
+  #     - HTTPPROXY_STEALTH=on
+  #     #- HTTPPROXY_LISTENING_ADDRESS=8888
+  #     - HTTPPROXY_USER=homeden
+  #     - HTTPPROXY_PASSWORD=homeden
+  #   labels:
+  #     - "homepage.group=Containers"
+  #     - "homepage.name=gluetun"
+  #     - "homepage.icon=gluetun.png"
+  #     - "homepage.description=VPN Proxy provider"
+  #   networks:
+  #     home_net:
+  #       ipv4_address: 172.13.0.26
+  #   restart: unless-stopped

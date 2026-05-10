@@ -1,0 +1,142 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["backup"]
+
+
+
+services:
+  backrest:
+    image: garethgeorge/backrest:v1.8.1
+    container_name: backrest           # https://garethgeorge.github.io/backrest/introduction/getting-started
+    hostname: backrest                    
+    volumes:      # use your application key id as b2_account_id and application key as b2_account_key
+      - ${DOCKER_HOME}/backrest/data:/data
+      - ${DOCKER_HOME}/backrest/config:/config
+      - ${DOCKER_HOME}/backrest/cache:/cache
+      - ${ROOT_HOME}:/userdata
+      #- /MY-BACKUP-DATA:/userdata # [optional] mount local paths to backup here.
+      #- /MY-REPOS:/repos # [optional] mount repos if using local storage, not necessary for remotes e.g. B2, S3, etc.
+    environment:
+      - BACKREST_DATA=/data # path for backrest data. restic binary and the database are placed here.
+      - BACKREST_CONFIG=/config/config.json # path for the backrest config file.
+      - XDG_CACHE_HOME=/cache # path for the restic cache which greatly improves performance.
+      - TZ=${TIMEZONE}            # set the timezone for the container, used as the timezone for cron jobs.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backrest-rtr.rule=Host(`backrest.0040300.xyz`)"
+      - "traefik.http.routers.backrest-rtr.tls=true"
+      - "traefik.http.services.backrest-rtr.loadbalancer.server.port=9898"
+      - "traefik.http.routers.backrest-rtr.entrypoints=websecure"
+      - "traefik.http.routers.backrest-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.backrest-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.backrest-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=backrest"
+      - "homepage.icon=backblaze.png"
+      - "homepage.href=http://backrest.0040300.xyz/"
+      - "homepage.description=Backup Tool"
+      - "homepage.siteMonitor=http://backrest:9898"
+    #user: 1000:1000    # let it run as root user so that we can backup docker dir
+    <<: *function
+
+  linkwarden:
+    #env_file: .env
+    image: ghcr.io/linkwarden/linkwarden:v2.13.1 # comment to build from source
+    container_name: linkwarden
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.linkwarden-rtr.rule=Host(`linkwarden.0040300.xyz`)"
+      - "traefik.http.routers.linkwarden-rtr.tls=true"
+      - "traefik.http.services.linkwarden-rtr.loadbalancer.server.port=3000"
+      - "traefik.http.routers.linkwarden-rtr.entrypoints=websecure"
+      - "traefik.http.routers.linkwarden-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.linkwarden-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.linkwarden-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=linkwarden"
+      - "homepage.icon=linkwarden.png"
+      - "homepage.href=http://linkwarden.0040300.xyz/"
+      - "homepage.description=Bookmark Manager and RIL"
+      - "homepage.siteMonitor=http://linkwarden:3000"
+    environment:
+      - TZ=${TIMEZONE}
+      - DATABASE_URL=postgresql://${LINKWARDEN_DB_USERNAME}:${GENERAL_PASSWORD}@postgres-linkwarden:5432/linkwarden
+      - MEILI_HOST=http://meilisearch-linkwarden:7700
+      - MEILI_MASTER_KEY=${GENERAL_PASSWORD}
+      - NEXTAUTH_SECRET=${GENERAL_PASSWORD}
+      - NEXTAUTH_URL=http://localhost:3000/api/v1/auth
+    # build: . # uncomment to build from source
+    volumes:
+      - ${DOCKER_HOME}/linkwarden/data:/data/data
+    depends_on:
+      - postgres-linkwarden
+      - meilisearch-linkwarden
+    <<: *function
+
+  meilisearch-linkwarden:
+    image: getmeili/meilisearch:v1.25.0
+    container_name: meilisearch-linkwarden            # remember indexing will happen for each link only when it is added !!
+    labels:                 # curl -X GET 'http://localhost:7700/tasks' -H 'Authorization: Bearer <password>'
+      - "homepage.group=Containers"
+      - "homepage.name=meilisearch-linkwarden"
+      - "homepage.icon=meilisearch.png"
+      - "homepage.description=Search engine for Linkwarden"
+      - "homepage.siteMonitor=http://meilisearch-linkwarden:7700"
+    environment:
+      - TZ=${TIMEZONE}
+      - MEILI_MASTER_KEY=${GENERAL_PASSWORD}
+    volumes:
+      - ${DOCKER_HOME}/linkwarden/meili_data:/meili_data
+    <<: *function
+
+  postgres-linkwarden:
+    image: postgres:16-alpine
+    container_name: postgres-linkwarden
+    labels:
+      - "homepage.group=Containers"
+      - "homepage.name=postgres-linkwarden"
+      - "homepage.icon=postgres.png"
+      - "homepage.description=Postgres for Linkwarden"
+    environment:
+      - TZ=${TIMEZONE}
+      - POSTGRES_PASSWORD=${GENERAL_PASSWORD}
+      - POSTGRES_USER=${LINKWARDEN_DB_USERNAME}
+      - POSTGRES_DB=linkwarden
+    volumes:
+      - ${DOCKER_HOME}/linkwarden/pgdata:/var/lib/postgresql/data
+    <<: *function
+
+# Remember to Remove all the contents inside respective folders before importing password from files, coz it would form duplicates
+  vaultwarden:
+    image: ghcr.io/dani-garcia/vaultwarden:1.34.2-alpine
+    container_name: vaultwarden
+    user: 1000:1000
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vaultwarden-rtr.rule=Host(`vaultwarden.0040300.xyz`)"
+      - "traefik.http.routers.vaultwarden-rtr.tls=true"
+      - "traefik.http.services.vaultwarden-rtr.loadbalancer.server.port=80"
+      - "traefik.http.routers.vaultwarden-rtr.entrypoints=websecure"
+      - "traefik.http.routers.vaultwarden-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.vaultwarden-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.vaultwarden-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=vaultwarden"
+      - "homepage.icon=vaultwarden.png"
+      - "homepage.href=http://vaultwarden.0040300.xyz/"
+      - "homepage.description=Password and Secrets Manager"
+      - "homepage.siteMonitor=http://vaultwarden:80"
+    environment:
+      - TZ=${TIMEZONE}
+      - DOMAIN=https://vaultwarden.0040300.xyz
+      - SMTP_HOST=smtp.resend.com
+      - SMTP_PORT=465     # SMTPS Port-465     SMTP port is 587 or 25
+      - SMTP_SECURITY=force_tls          # starttls for port 25 & 587
+      - SMTP_FROM=noreply@0040300.xyz    # Resend sender address
+      - SMTP_USERNAME=${RESEND_SMTP_USER}
+      - SMTP_PASSWORD=${RESEND_SMTP_PASS}
+    volumes:
+      - ${DOCKER_HOME}/vaultwarden:/data/
+    <<: *function

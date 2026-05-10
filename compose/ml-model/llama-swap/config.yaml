@@ -1,0 +1,38 @@
+# reference https://github.com/mostlygeek/llama-swap/blob/main/config.example.yaml
+healthCheckTimeout: 300
+macros:      # the $PORT will be randomly generated
+  "docker-llama": >
+    docker run --init --rm --pull always --network t2_proxy
+    -v /home/subash/hdd-1-b/llm:/models
+models:
+  "gemma-3-1b":
+    cmd: |
+      ${docker-llama} --name gemma-3-1b
+      ghcr.io/ggerganov/llama.cpp:server --model /models/gemma-3-1b-it-Q4_K_M.gguf --port ${PORT}
+    cmdStop: docker stop gemma-3-1b
+    proxy: "http://gemma-3-1b:${PORT}"
+    ttl: 300
+
+  "gemma-3-4b":
+    cmd: |
+      ${docker-llama} --name gemma-3-4b
+      ghcr.io/ggerganov/llama.cpp:server --model /models/gemma-3-4b-it-Q4_K_M.gguf --port ${PORT}
+    cmdStop: docker stop gemma-3-4b
+    proxy: "http://gemma-3-4b:${PORT}"
+    ttl: 300
+
+  "gemma-3-4b-Q8":
+    cmd: |
+      ${docker-llama} --name gemma-3-4b-Q8
+      ghcr.io/ggerganov/llama.cpp:server --model /models/gemma-3-4b-it-Q8_0.gguf --port ${PORT}
+    cmdStop: docker stop gemma-3-4b-Q8
+    proxy: "http://gemma-3-4b-Q8:${PORT}"
+    ttl: 300
+
+  "qwen-3-4b-Q8":
+    cmd: |
+      ${docker-llama} --name qwen-3-4b-Q8
+      ghcr.io/ggerganov/llama.cpp:server --model /models/Qwen3-4B-Q8_0.gguf --port ${PORT}
+    cmdStop: docker stop qwen-3-4b-Q8
+    proxy: "http://qwen-3-4b-Q8:${PORT}"
+    ttl: 300

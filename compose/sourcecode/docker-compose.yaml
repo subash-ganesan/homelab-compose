@@ -1,0 +1,89 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["sourcecode"]
+
+
+services:
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:13.0.2
+    container_name: forgejo
+    labels:   
+      - "traefik.enable=true"
+      - "traefik.http.routers.forgejo-rtr.rule=Host(`forgejo.0040300.xyz`)"
+      - "traefik.http.routers.forgejo-rtr.tls=true"
+      - "traefik.http.services.forgejo-rtr.loadbalancer.server.port=3000"
+      - "traefik.http.routers.forgejo-rtr.entrypoints=websecure"
+      - "traefik.http.routers.forgejo-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.forgejo-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.forgejo-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Home"
+      - "homepage.name=forgejo"
+      - "homepage.icon=forgejo.png"
+      - "homepage.href=http://forgejo.0040300.xyz/"
+      - "homepage.description= Selfhosted Git "
+      - "homepage.siteMonitor=http://forgejo:3000"
+    environment:
+      - TZ=${TIMEZONE}
+      - USER_UID=1000
+      - USER_GID=1000
+      - FORGEJO__database__DB_TYPE=postgres
+      - FORGEJO__database__HOST=forgejo-postgres:5432
+      - FORGEJO__database__NAME=forgejo
+      - FORGEJO__database__USER=${FORGEJO_DATABASE_USER}
+      - FORGEJO__database__PASSWD=${FORGEJO_DATABASE_PASSWORD}
+    volumes:  # location of main conf file is ${HDD_1_A_HOME}/forgejo/gitea/conf on host server, edit and restart service
+      - ${HDD_1_A_HOME}/forgejo:/data
+    ports:
+      - "222:22"          # traefik can only handle http layer, it cant be used to forward TCP traffic so exposed port on host directly
+    #   - 3000:3000
+    depends_on:
+      - forgejo-postgres
+    <<: *function
+
+  forgejo-postgres:
+    image: postgres:14.20-alpine3.22
+    container_name: forgejo-postgres
+    labels:
+      - "homepage.group=Containers"
+      - "homepage.name=forgejo-postgres"
+      - "homepage.icon=postgres.png"
+      - "homepage.description=Postgres for Forgejo"
+    environment:
+      - TZ=${TIMEZONE}
+      - POSTGRES_DB=forgejo
+      - POSTGRES_USER=${FORGEJO_DATABASE_USER}
+      - POSTGRES_PASSWORD=${FORGEJO_DATABASE_PASSWORD}
+    volumes:
+      - ${DOCKER_HOME}/forgejo/postgresql:/var/lib/postgresql/data
+    <<: *function
+
+  forgejo-dind:
+    image: docker:29.0.1-dind
+    container_name: forgejo-dind
+    environment:
+      TZ: ${TIMEZONE}
+    privileged: true
+    command: ["dockerd", "-H", "tcp://0.0.0.0:2375", "--tls=false"]
+    <<: *function
+
+ # current used labels -> latest:docker:ghcr.io/catthehacker/ubuntu:runner-latest,ubuntu-22.04:docker:ghcr.io/catthehacker/ubuntu:runner-22.04
+  forgejo-runner:
+    image: code.forgejo.org/forgejo/runner:11.3.1
+    container_name: forgejo-runner
+    user: 1000:1000 
+    environment:
+      TZ: ${TIMEZONE}
+      DOCKER_HOST: tcp://forgejo-dind:2375
+    volumes:
+      - ${DOCKER_HOME}/forgejo/runner/data:/data
+      - ${DOCKER_HOME}/forgejo/runner/config.yaml:/config.yaml
+    # command: '/bin/sh -c "while : ; do sleep 1 ; done ;"'
+    command: '/bin/sh -c "sleep 5; forgejo-runner daemon --config /config.yaml"'
+    links:
+      - forgejo-dind
+    depends_on:
+      forgejo-dind:
+        condition: service_started
+    <<: *function

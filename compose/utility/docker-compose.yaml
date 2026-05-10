@@ -1,0 +1,166 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["utility"]
+
+
+services:
+  olivetin:
+    container_name: olivetin
+    image: ghcr.io/olivetin/olivetin:2025.6.22
+    user: root
+    volumes:
+      - ${DOCKER_HOME}/olivetin:/config # replace host path or volume as needed
+      - /var/run/docker.sock:/var/run/docker.sock
+    privileged: true        # https://github.com/OliveTin/OliveTin/blob/main/config.yaml
+    environment:
+      - TZ=${TIMEZONE}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.olivetin-rtr.rule=Host(`olivetin.0040300.xyz`)"
+      - "traefik.http.routers.olivetin-rtr.tls=true"
+      - "traefik.http.services.olivetin-rtr.loadbalancer.server.port=1337"
+      - "traefik.http.routers.olivetin-rtr.entrypoints=websecure"
+      - "traefik.http.routers.olivetin-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.olivetin-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.olivetin-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=olivetin"
+      - "homepage.icon=olivetin.png"
+      - "homepage.href=http://olivetin.0040300.xyz/"
+      - "homepage.description=Script Executor"
+      - "homepage.siteMonitor=http://olivetin:1337"
+    <<: *function
+
+  stirling-pdf:
+    image: ghcr.io/stirling-tools/stirling-pdf:1.5.0
+    container_name: stirling-pdf
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.stirling-pdf-rtr.rule=Host(`stirlingpdf.0040300.xyz`)"
+      - "traefik.http.routers.stirling-pdf-rtr.tls=true"
+      - "traefik.http.services.stirling-pdf-rtr.loadbalancer.server.port=8080"
+      - "traefik.http.routers.stirling-pdf-rtr.entrypoints=websecure"
+      - "traefik.http.routers.stirling-pdf-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.stirling-pdf-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.stirling-pdf-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=stirling-pdf"
+      - "homepage.icon=stirling-pdf.png"
+      - "homepage.href=http://stirlingpdf.0040300.xyz/"
+      - "homepage.description=All in one PDF tools"
+      - "homepage.siteMonitor=http://stirling-pdf:8080"
+    environment:
+      - TZ=${TIMEZONE}
+      - DISABLE_ADDITIONAL_FEATURES=false
+      - LANGS=en_GB
+    volumes:
+      - ${DOCKER_HOME}/stirlingpdf/trainingData:/usr/share/tessdata
+      - ${DOCKER_HOME}/stirlingpdf/extraConfigs:/configs
+      - ${DOCKER_HOME}/stirlingpdf/customFiles:/customFiles/
+      - ${DOCKER_HOME}/stirlingpdf/logs:/logs/
+      - ${DOCKER_HOME}/stirlingpdf/pipeline:/pipeline/
+    <<: *function
+
+  bentopdf:
+    image: ghcr.io/alam00000/bentopdf-simple:1.11.2
+    container_name: bentopdf
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bentopdf-rtr.rule=Host(`bentopdf.0040300.xyz`)"
+      - "traefik.http.routers.bentopdf-rtr.tls=true"
+      - "traefik.http.services.bentopdf-rtr.loadbalancer.server.port=8080"
+      - "traefik.http.routers.bentopdf-rtr.entrypoints=websecure"
+      - "traefik.http.routers.bentopdf-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.bentopdf-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.bentopdf-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=bentopdf"
+      - "homepage.icon=bentopdf.png"
+      - "homepage.href=http://bentopdf.0040300.xyz/"
+      - "homepage.description=All in one PDF tools"
+      - "homepage.siteMonitor=http://bentopdf:8080"
+    environment:
+      - TZ=${TIMEZONE}
+    <<: *function
+
+  sshwifty:
+    image: niruix/sshwifty:latest
+    container_name: sshwifty
+    environment:
+      TZ: ${TIMEZONE}
+      SSHWIFTY_SHAREDKEY: ${GENERAL_PASSWORD}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sshwifty-rtr.rule=Host(`sshwifty.0040300.xyz`)"
+      - "traefik.http.routers.sshwifty-rtr.tls=true"
+      - "traefik.http.services.sshwifty-rtr.loadbalancer.server.port=8182"
+      - "traefik.http.routers.sshwifty-rtr.entrypoints=websecure"
+      - "traefik.http.routers.sshwifty-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.sshwifty-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.sshwifty-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=sshwifty"
+      - "homepage.icon=sshwifty.png"
+      - "homepage.href=http://sshwifty.0040300.xyz/"
+      - "homepage.description=SSH Web-client"
+      - "homepage.siteMonitor=http://sshwifty:8182"
+    <<: *function
+
+  n8n:             
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    volumes:
+      - ${DOCKER_HOME}/n8n/n8n_data:/home/node/.n8n
+      - ${DOCKER_HOME}/n8n/files:/files              # use this to share content between n8n and host
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:                  # https://docs.n8n.io/hosting/installation/server-setups/docker-compose/#6-create-docker-compose-file
+      - "traefik.enable=true"
+      - "traefik.http.routers.n8n-rtr.rule=Host(`n8n.0040300.xyz`)"
+      - "traefik.http.routers.n8n-rtr.tls=true"
+      - "traefik.http.services.n8n-rtr.loadbalancer.server.port=5678"
+      - "traefik.http.routers.n8n-rtr.entrypoints=websecure"
+      - "traefik.http.routers.n8n-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.n8n-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.n8n-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=n8n"
+      - "homepage.icon=n8n.png"
+      - "homepage.href=http://n8n.0040300.xyz/"
+      - "homepage.description=Build Workflows"
+      - "homepage.siteMonitor=http://n8n:5678"
+    environment:
+      - TZ=${TIMEZONE}
+      - N8N_HOST=n8n.0040300.xyz
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=https://n8n.0040300.xyz/
+    <<: *function
+
+  it-tools:
+    image: corentinth/it-tools:2024.10.22-7ca5933
+    container_name: it-tools
+    environment:
+      TZ: ${TIMEZONE}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.it-tools-rtr.rule=Host(`it-tools.0040300.xyz`)"
+      - "traefik.http.routers.it-tools-rtr.tls=true"
+      - "traefik.http.services.it-tools-rtr.loadbalancer.server.port=80"
+      - "traefik.http.routers.it-tools-rtr.entrypoints=websecure"
+      - "traefik.http.routers.it-tools-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.it-tools-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.it-tools-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=it-tools"
+      - "homepage.icon=it-tools.png"
+      - "homepage.href=http://it-tools.0040300.xyz/"
+      - "homepage.description=Tools for IT"
+      - "homepage.siteMonitor=http://it-tools:80"
+    <<: *function
+
+
+
+
+

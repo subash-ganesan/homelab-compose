@@ -1,0 +1,499 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["arr-stack"]
+
+
+x-environment: &environment
+  PUID: 1000
+  PGID: 1000
+  TZ: ${TIMEZONE}
+
+
+# follow this for folder structure to enable hardlink https://wiki.servarr.com/docker-guide#consistent-and-well-planned-paths
+# https://trash-guides.info/File-and-Folder-Structure/
+services:
+# https://github.com/qbittorrent/search-plugins/wiki/Unofficial-search-plugins
+# removing something from radarr/sonarr does not delete it from torrent download folder only removes the hardlink in media folder
+  qbittorrent:     #https://github.com/linuxserver/docker-qbittorrent
+    image: lscr.io/linuxserver/qbittorrent:5.1.2
+    container_name: qbittorrent                     # initial password get it from container logs. then login and set in options
+    environment:       
+      <<: *environment           
+      WEBUI_PORT: 8081         # can use qbitController apk from fdroid to connect
+    labels:            # remember to add categories if you're using arr https://trash-guides.info/Downloaders/qBittorrent/How-to-add-categories/
+      - "traefik.enable=true"
+      - "traefik.http.routers.qbittorrent-rtr.entrypoints=websecure"
+      - "traefik.http.routers.qbittorrent-rtr.rule=Host(`qbittorrent.0040300.xyz`)"
+      - "traefik.http.routers.qbittorrent-rtr.tls=true"
+      - "traefik.http.services.qbittorrent-svc.loadbalancer.server.port=8081"
+      - "traefik.http.routers.qbittorrent-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.qbittorrent-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.qbittorrent-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=qbittorrent"
+      - "homepage.icon=qbittorrent.png"
+      - "homepage.href=http://qbittorrent.0040300.xyz/"
+      - "homepage.description=Torrent Downloader"
+      - "homepage.siteMonitor=http://qbittorrent:8081"
+      - "homepage.widget.type=qbittorrent"
+      - "homepage.widget.url=http://qbittorrent:8081"
+      - "homepage.widget.username=${GENERAL_USERNAME}"
+      - "homepage.widget.password=${GENERAL_PASSWORD}"
+      - "homepage.widget.enableLeechProgress=true"
+    volumes:
+      - ${DOCKER_HOME}/qbittorrent/config:/config
+      - ${HDD_1_B_HOME}/storage/torrents:/data/torrents
+    ports:
+      - 8081:8081
+#      - 6881:6881
+#      - 6881:6881/udp
+    <<: *function
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:v3.3.24
+    container_name: flaresolverr
+    labels:
+      - "homepage.group=Containers"
+      - "homepage.name=flaresolverr"
+      - "homepage.icon=flaresolverr.png"
+      - "homepage.description=Proxy server to bypass Cloudflare protection"
+      - "homepage.siteMonitor=http://flaresolverr:8191"
+    environment:
+      - TZ=${TIMEZONE}               # Use TZ database name from https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+    <<: *function
+
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    environment:
+      <<: *environment
+    volumes:
+      - ${DOCKER_HOME}/arr-suite/bazarr:/config # location of database and configs
+      - ${HDD_1_B_HOME}/storage:/data # location of media library (optional)
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bazarr-rtr.rule=Host(`bazarr.0040300.xyz`)"
+      - "traefik.http.routers.bazarr-rtr.tls=true"
+      - "traefik.http.services.bazarr-rtr.loadbalancer.server.port=6767"
+      - "traefik.http.routers.bazarr-rtr.entrypoints=websecure"
+      - "traefik.http.routers.bazarr-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.bazarr-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.bazarr-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Media"
+      - "homepage.name=bazarr"
+      - "homepage.icon=bazarr.png"
+      - "homepage.href=http://bazarr.0040300.xyz/"
+      - "homepage.description=arr-suite for subtitles"
+      - "homepage.siteMonitor=http://bazarr:6767"
+    <<: *function
+
+
+  readarr:
+    image: linuxserver/readarr:develop
+    container_name: readarr
+    environment:
+      <<: *environment
+    volumes:
+      - ${DOCKER_HOME}/arr-suite/readarr:/config # location of database and configs
+      - ${HDD_1_B_HOME}/storage:/data # location of media library + qbittorrent download folder
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.readarr-rtr.rule=Host(`readarr.0040300.xyz`)"
+      - "traefik.http.routers.readarr-rtr.tls=true"
+      - "traefik.http.services.readarr-rtr.loadbalancer.server.port=8787"
+      - "traefik.http.routers.readarr-rtr.entrypoints=websecure"
+      - "traefik.http.routers.readarr-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.readarr-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.readarr-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Media"
+      - "homepage.name=readarr"
+      - "homepage.icon=readarr.png"
+      - "homepage.href=http://readarr.0040300.xyz/"
+      - "homepage.description=arr-suite for books"
+      - "homepage.siteMonitor=http://readarr:8787"
+    <<: *function
+
+  # image used to scan for music
+  lidarr:
+    image: linuxserver/lidarr:latest
+    container_name: lidarr
+    environment:
+      <<: *environment
+    volumes:
+      - ${DOCKER_HOME}/arr-suite/lidarr:/config # location of database and configs
+      - ${HDD_1_B_HOME}/storage:/data # location of media library + qbittorrent download folder
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.lidarr-rtr.rule=Host(`lidarr.0040300.xyz`)"
+      - "traefik.http.routers.lidarr-rtr.tls=true"
+      - "traefik.http.services.lidarr-rtr.loadbalancer.server.port=8686"
+      - "traefik.http.routers.lidarr-rtr.entrypoints=websecure"
+      - "traefik.http.routers.lidarr-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.lidarr-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.lidarr-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Media"
+      - "homepage.name=lidarr"
+      - "homepage.icon=lidarr.png"
+      - "homepage.href=http://lidarr.0040300.xyz/"
+      - "homepage.description=arr-suite for music"
+      - "homepage.siteMonitor=http://lidarr:8686"
+    <<: *function
+
+  # image used to scan for movies
+  radarr:
+    image: linuxserver/radarr:version-5.25.0.10024
+    container_name: radarr
+    environment:
+      <<: *environment
+    volumes:
+      - ${DOCKER_HOME}/arr-suite/radarr:/config # location of database and configs
+      - ${HDD_1_B_HOME}/storage:/data # location of media library + qbittorrent download folder
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.radarr-rtr.rule=Host(`radarr.0040300.xyz`)"
+      - "traefik.http.routers.radarr-rtr.tls=true"
+      - "traefik.http.services.radarr-rtr.loadbalancer.server.port=7878"
+      - "traefik.http.routers.radarr-rtr.entrypoints=websecure"
+      - "traefik.http.routers.radarr-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.radarr-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.radarr-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Media"
+      - "homepage.name=radarr"
+      - "homepage.icon=radarr.png"
+      - "homepage.href=http://radarr.0040300.xyz/"
+      - "homepage.description=arr-suite for movies"
+      - "homepage.siteMonitor=http://radarr:7878"
+    <<: *function
+
+  # image used to scan for tv shows
+  sonarr:
+    image: linuxserver/sonarr:version-4.0.14.2939
+    container_name: sonarr
+ # mostly if you face any issues with stuck queues, just delete them from queue which will remove from download client. then again download the torrent and import
+ # during manual import, you can also select an episode, and shift+click the target episode to select all on the path
+    environment:
+      <<: *environment
+    volumes:
+      - ${DOCKER_HOME}/arr-suite/sonarr:/config # location of database and configs
+      - ${HDD_1_B_HOME}/storage:/data # location of media library + qbittorrent download folder
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sonarr-rtr.rule=Host(`sonarr.0040300.xyz`)"
+      - "traefik.http.routers.sonarr-rtr.tls=true"
+      - "traefik.http.services.sonarr-rtr.loadbalancer.server.port=8989"
+      - "traefik.http.routers.sonarr-rtr.entrypoints=websecure"
+      - "traefik.http.routers.sonarr-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.sonarr-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.sonarr-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Media"
+      - "homepage.name=sonarr"
+      - "homepage.icon=sonarr.png"
+      - "homepage.href=http://sonarr.0040300.xyz/"
+      - "homepage.description=arr-suite for tv-shows"
+      - "homepage.siteMonitor=http://sonarr:8989"
+    <<: *function
+
+ # image used to index torrent links from the internet
+  prowlarr:
+    image: linuxserver/prowlarr:version-1.37.0.5076
+    container_name: prowlarr
+    #sysctls:
+    #  - net.ipv6.conf.all.disable_ipv6=1
+    #  - net.ipv6.conf.default.disable_ipv6=1
+    environment:
+      <<: *environment
+      #- PROWLARR_IGNORE_SSL_ERRORS=true
+      #- FIREWALL_OUTBOUND_SUBNETS=192.168.0.0/24
+    volumes:
+      - ${DOCKER_HOME}/arr-suite/prowlarr:/config # location of database and configs
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prowlarr-rtr.rule=Host(`prowlarr.0040300.xyz`)"
+      - "traefik.http.routers.prowlarr-rtr.tls=true"
+      - "traefik.http.services.prowlarr-rtr.loadbalancer.server.port=9696"
+      - "traefik.http.routers.prowlarr-rtr.entrypoints=websecure"
+      - "traefik.http.routers.prowlarr-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.prowlarr-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.prowlarr-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Media"
+      - "homepage.name=prowlarr"
+      - "homepage.icon=prowlarr.png"
+      - "homepage.href=http://prowlarr.0040300.xyz/"
+      - "homepage.description=arr-suite for torrent index"
+      - "homepage.siteMonitor=http://prowlarr:9696"
+    #dns:
+    #  - 172.13.0.4
+    depends_on:
+      - flaresolverr
+    <<: *function
+
+  huntarr:
+    image: ghcr.io/plexguide/huntarr:8.2.10
+    container_name: huntarr           # storm-shadow-quest-94
+    labels:        # username: homeden   password: Welcome@1
+      - "traefik.enable=true"
+      - "traefik.http.routers.huntarr-rtr.rule=Host(`huntarr.0040300.xyz`)"
+      - "traefik.http.routers.huntarr-rtr.tls=true"
+      - "traefik.http.services.huntarr-rtr.loadbalancer.server.port=9705"
+      - "traefik.http.routers.huntarr-rtr.entrypoints=websecure"
+      - "traefik.http.routers.huntarr-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.huntarr-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.huntarr-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=huntarr"
+      - "homepage.icon=huntarr.png"
+      - "homepage.href=http://huntarr.0040300.xyz/"
+      - "homepage.description=Content hunter for arr apps"
+      - "homepage.siteMonitor=http://huntarr:9705"
+    volumes:
+      - ${DOCKER_HOME}/huntarr:/config
+    environment:
+      - TZ=${TIMEZONE}
+    depends_on:
+      - sonarr
+    <<: *function
+
+  cleanuperr:
+    image: ghcr.io/cleanuparr/cleanuparr:2.0.18
+    container_name: cleanuperr   
+    volumes:           # https://flmorg.github.io/cleanuperr/docs/configuration/examples/docker
+      # if you want persistent logs
+      #- ./cleanuperr/logs:/var/logs
+      # if you want to ignore certain downloads from being processed. you can mention qbittorrent tag or torrent hash
+      #- ./cleanuperr/ignored.txt:/ignored.txt
+      # if you're using cross-seed and the hardlinks functionality
+      - ${HDD_1_B_HOME}/storage/torrents:/downloads
+      - ${DOCKER_HOME}/cleanuperr/config:/config
+    environment:      # dont think the envs work. use the Ui for config instead using this as reference
+      - TZ=${TIMEZONE}
+      - PORT=11011
+      - PUID=1000
+      - PGID=1000
+      # remember any env below does not work !! its only for reference
+      - DRY_RUN=false
+      - HTTP_MAX_RETRIES=0
+      - HTTP_TIMEOUT=100
+      - HTTP_VALIDATE_CERT=Enabled
+      
+      - LOGGING__LOGLEVEL=Information
+      - LOGGING__FILE__ENABLED=false
+      - LOGGING__FILE__PATH=/var/logs/
+      - LOGGING__ENHANCED=true
+      
+      - SEARCH_ENABLED=false   # disabled as we use huntarr
+      - SEARCH_DELAY=30
+      
+      - TRIGGERS__QUEUECLEANER=0 0/5 * * * ?
+      - QUEUECLEANER__ENABLED=true
+      #- QUEUECLEANER__IGNORED_DOWNLOADS_PATH=/ignored.txt
+      - QUEUECLEANER__RUNSEQUENTIALLY=true
+      
+      - QUEUECLEANER__IMPORT_FAILED_MAX_STRIKES=5
+      - QUEUECLEANER__IMPORT_FAILED_IGNORE_PRIVATE=false
+      - QUEUECLEANER__IMPORT_FAILED_DELETE_PRIVATE=false
+      - QUEUECLEANER__IMPORT_FAILED_IGNORE_PATTERNS__0=title mismatch
+      - QUEUECLEANER__IMPORT_FAILED_IGNORE_PATTERNS__1=manual import required
+      
+      - QUEUECLEANER__STALLED_MAX_STRIKES=10
+      - QUEUECLEANER__STALLED_RESET_STRIKES_ON_PROGRESS=true
+      - QUEUECLEANER__STALLED_IGNORE_PRIVATE=false
+      - QUEUECLEANER__STALLED_DELETE_PRIVATE=false
+      - QUEUECLEANER__DOWNLOADING_METADATA_MAX_STRIKES=10
+      
+      - QUEUECLEANER__SLOW_MAX_STRIKES=10
+      - QUEUECLEANER__SLOW_RESET_STRIKES_ON_PROGRESS=true
+      - QUEUECLEANER__SLOW_IGNORE_PRIVATE=false
+      - QUEUECLEANER__SLOW_DELETE_PRIVATE=false
+      - QUEUECLEANER__SLOW_MIN_SPEED=50KB       # allowed values like 1MB, 1.5KB
+      #- QUEUECLEANER__SLOW_MAX_TIME=48           # The maximum estimated hours a download should take to finish   # value of 0 means disabled ?
+      - QUEUECLEANER__SLOW_IGNORE_ABOVE_SIZE=10GB
+      
+      - TRIGGERS__CONTENTBLOCKER=0 0/5 * * * ?
+      - CONTENTBLOCKER__ENABLED=true
+      #- CONTENTBLOCKER__IGNORED_DOWNLOADS_PATH=/ignored.txt
+      - CONTENTBLOCKER__IGNORE_PRIVATE=true
+      - CONTENTBLOCKER__DELETE_PRIVATE=false
+      
+      - TRIGGERS__DOWNLOADCLEANER=0 0 * * * ?
+      - DOWNLOADCLEANER__ENABLED=true
+      #- DOWNLOADCLEANER__IGNORED_DOWNLOADS_PATH=/ignored.txt
+      - DOWNLOADCLEANER__DELETE_PRIVATE=false
+      
+      #- DOWNLOADCLEANER__CATEGORIES__0__NAME=tv-sonarr
+      #- DOWNLOADCLEANER__CATEGORIES__0__MAX_RATIO=-1      # -1 means disabled/nolimit
+      #- DOWNLOADCLEANER__CATEGORIES__0__MIN_SEED_TIME=0
+      #- DOWNLOADCLEANER__CATEGORIES__0__MAX_SEED_TIME=240
+      #- DOWNLOADCLEANER__CATEGORIES__1__NAME=radarr      # Multiple categories can be specified using this format, where <NUMBER> starts from 0:
+      #- DOWNLOADCLEANER__CATEGORIES__1__MAX_RATIO=1
+      #- DOWNLOADCLEANER__CATEGORIES__1__MIN_SEED_TIME=0
+      #- DOWNLOADCLEANER__CATEGORIES__1__MAX_SEED_TIME=240
+      #- DOWNLOADCLEANER__CATEGORIES__2__NAME=cleanuperr-unlinked    # we didnt specify cleanup for this coz we want it to be manual
+      #- DOWNLOADCLEANER__CATEGORIES__2__MAX_RATIO=1
+      #- DOWNLOADCLEANER__CATEGORIES__2__MIN_SEED_TIME=0
+      #- DOWNLOADCLEANER__CATEGORIES__2__MAX_SEED_TIME=240
+      
+      - DOWNLOADCLEANER__UNLINKED_TARGET_CATEGORY=cleanuperr-unlinked
+      - DOWNLOADCLEANER__UNLINKED_USE_TAG=true     # sets additional tag instead of changaing category. works only for qbittorrent
+      # - DOWNLOADCLEANER__UNLINKED_IGNORED_ROOT_DIR=/downloads  # This is useful if you are using cross-seed. https://www.cross-seed.org/
+      - DOWNLOADCLEANER__UNLINKED_CATEGORIES__0=anime      # categories to check for cleanup
+      - DOWNLOADCLEANER__UNLINKED_CATEGORIES__1=tv
+      
+      # - DOWNLOAD_CLIENT=none
+      # OR
+      # - DOWNLOAD_CLIENT=disabled      # dont use this along with enabling queue cleaner as it will delete all if something fails to import
+      # OR          
+      - DOWNLOAD_CLIENT=qBittorrent
+      - QBITTORRENT__URL=http://qbittorrent:8081
+      # - QBITTORRENT__URL_BASE=myCustomPath
+      - QBITTORRENT__USERNAME=homeden
+      - QBITTORRENT__PASSWORD=homeden
+      
+     # https://flmorg.github.io/cleanuperr/docs/configuration/arrs/sonarr/?SONARR__BLOCK__PATH
+      - SONARR__ENABLED=true
+      - SONARR__IMPORT_FAILED_MAX_STRIKES=-1
+      - SONARR__SEARCHTYPE=Season
+      - SONARR__BLOCK__TYPE=blacklist
+      - SONARR__BLOCK__PATH=https://raw.githubusercontent.com/flmorg/cleanuperr/refs/heads/main/blacklist         
+      - SONARR__INSTANCES__0__URL=http://sonarr:8989
+      - SONARR__INSTANCES__0__APIKEY=${SONARR_APIKEY}
+      #- SONARR__INSTANCES__1__URL=http://localhost:8990
+      #- SONARR__INSTANCES__1__APIKEY=sonarrSecret2
+      
+      - RADARR__ENABLED=true
+      - RADARR__IMPORT_FAILED_MAX_STRIKES=-1
+      - RADARR__BLOCK__TYPE=blacklist
+      - RADARR__BLOCK__PATH=https://raw.githubusercontent.com/flmorg/cleanuperr/refs/heads/main/blacklist
+      - RADARR__INSTANCES__0__URL=http://radarr:7878
+      - RADARR__INSTANCES__0__APIKEY=${RADARR_APIKEY}
+      #- RADARR__INSTANCES__1__URL=http://localhost:7879
+      #- RADARR__INSTANCES__1__APIKEY=radarrSecret2
+      
+      #- LIDARR__ENABLED=true
+      #- LIDARR__IMPORT_FAILED_MAX_STRIKES=-1
+      #- LIDARR__BLOCK__TYPE=blacklist
+      #- LIDARR__BLOCK__PATH=https://example.com/path/to/file.txt
+      #- LIDARR__INSTANCES__0__URL=http://localhost:8686
+      #- LIDARR__INSTANCES__0__APIKEY=lidarrSecret1
+      #- LIDARR__INSTANCES__1__URL=http://localhost:8687
+      #- LIDARR__INSTANCES__1__APIKEY=lidarrSecret2
+      
+      #- NOTIFIARR__ON_IMPORT_FAILED_STRIKE=true
+      #- NOTIFIARR__ON_STALLED_STRIKE=true
+      #- NOTIFIARR__ON_SLOW_STRIKE=true
+      #- NOTIFIARR__ON_QUEUE_ITEM_DELETED=true
+      #- NOTIFIARR__ON_DOWNLOAD_CLEANED=true
+      #- NOTIFIARR__ON_CATEGORY_CHANGED=true
+      #- NOTIFIARR__API_KEY=notifiarrSecret
+      #- NOTIFIARR__CHANNEL_ID=discordChannelId
+      
+      #- APPRISE__ON_IMPORT_FAILED_STRIKE=true
+      #- APPRISE__ON_STALLED_STRIKE=true
+      #- APPRISE__ON_SLOW_STRIKE=true
+      #- APPRISE__ON_QUEUE_ITEM_DELETED=true
+      #- APPRISE__ON_DOWNLOAD_CLEANED=true
+      #- APPRISE__ON_CATEGORY_CHANGED=true
+      #- APPRISE__URL=http://apprise:8000
+      #- APPRISE__KEY=myConfigKey
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cleanuperr-rtr.rule=Host(`cleanuperr.0040300.xyz`)"
+      - "traefik.http.routers.cleanuperr-rtr.tls=true"
+      - "traefik.http.services.cleanuperr-rtr.loadbalancer.server.port=11011"
+      - "traefik.http.routers.cleanuperr-rtr.entrypoints=websecure"
+      - "traefik.http.routers.cleanuperr-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.cleanuperr-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.cleanuperr-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=cleanuperr"
+      - "homepage.icon=cleanuperr.png"
+      - "homepage.href=http://cleanuperr.0040300.xyz/"
+      - "homepage.description=Cleaner for Arr apps"
+      - "homepage.siteMonitor=http://cleanuperr:11011"
+    depends_on:
+      - sonarr
+      - qbittorrent
+    <<: *function
+
+  cross-seed:
+    image: ghcr.io/cross-seed/cross-seed:6.13.6
+    container_name: cross-seed
+    user: 1000:1000 # this must match your torrent client (cross-seed does not support using PGID and PUID)
+    # ports:
+    #   - "2468:2468"
+    environment:
+      - TZ=${TIMEZONE}
+    volumes:
+        - ${DOCKER_HOME}/cross-seed:/config                  # config.js contains radarr sonarr API keys that must be rotated 
+        - ${DOCKER_HOME}/cross-seed/cross-seeds:/cross-seeds
+        - ${HDD_1_B_HOME}/storage/torrents:/data/torrents
+       # You will need at least one extra volume for your media drive if using https://www.cross-seed.org/docs/tutorials/linking
+    labels:
+      - "homepage.group=Tools"
+      - "homepage.name=cross-seed"
+      - "homepage.icon=cross-seed.png"
+      - "homepage.description=Cross-seed Torrents to Private Trackers"
+    command: daemon
+    depends_on:
+      - qbittorrent
+    <<: *function
+
+  dispatcharr:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    image: ghcr.io/dispatcharr/dispatcharr:0.13.1
+    container_name: dispatcharr
+    # ports:
+    #   - 9191:9191
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dispatcharr-rtr.rule=Host(`dispatcharr.0040300.xyz`)"
+      - "traefik.http.routers.dispatcharr-rtr.tls=true"
+      - "traefik.http.services.dispatcharr-rtr.loadbalancer.server.port=9191"
+      - "traefik.http.routers.dispatcharr-rtr.entrypoints=websecure"
+      - "traefik.http.routers.dispatcharr-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.dispatcharr-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.dispatcharr-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=dispatcharr"
+      - "homepage.icon=dispatcharr.png"
+      - "homepage.href=http://dispatcharr.0040300.xyz/"
+      - "homepage.description=dispatcharr for IPTV streaming"
+      - "homepage.siteMonitor=http://dispatcharr:9191"
+    volumes:
+      - ${DOCKER_HOME}/dispatcharr:/data
+    environment:
+      - TZ=${TIMEZONE}
+      - DISPATCHARR_ENV=aio
+      - REDIS_HOST=localhost
+      - CELERY_BROKER_URL=redis://localhost:6379/0
+      - DISPATCHARR_LOG_LEVEL=info
+      # - LIBVA_DRIVER_NAME=iHD
+
+      # Process Priority Configuration (Optional)
+      # Lower values = higher priority. Range: -20 (highest) to 19 (lowest)
+      # Negative values require cap_add: SYS_NICE (uncomment below)
+      #- UWSGI_NICE_LEVEL=-5   # uWSGI/FFmpeg/Streaming (default: 0, recommended: -5 for high priority)
+      #- CELERY_NICE_LEVEL=5   # Celery/EPG/Background tasks (default: 5, low priority)
+    #
+    # Uncomment to enable high priority for streaming (required if UWSGI_NICE_LEVEL < 0)
+    #cap_add:
+    #  - SYS_NICE
+    # Optional for hardware acceleration
+    devices:
+     - /dev/dri:/dev/dri  # For Intel/AMD GPU acceleration (VA-API)
+    # Uncomment the following lines for NVIDIA GPU support
+    # NVidia GPU support (requires NVIDIA Container Toolkit)
+    #deploy:
+    #  resources:
+    #      reservations:
+    #          devices:
+    #              - driver: nvidia
+    #                count: all
+    #                capabilities: [gpu]
+    <<: *function
+
+
+

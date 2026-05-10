@@ -1,0 +1,119 @@
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["personal"]
+
+
+
+services:
+  photoprism:
+    image: photoprism/photoprism:250707
+    container_name: photoprism
+    hostname: photoprism                # if you wish to import HEIC files then follow this to convert them to jpg https://docs.photoprism.app/developer-guide/media/heif/
+    environment:
+      - TZ=${TIMEZONE}
+      - PHOTOPRISM_ADMIN_PASSWORD=${MASTER_PASSWORD}
+      - PHOTOPRISM_ADMIN_USER=${ADMIN_USER}
+      - PHOTOPRISM_AUTH_MODE=password               # authentication mode (public, password)
+      - PHOTOPRISM_DEBUG=false
+      - PHOTOPRISM_PUBLIC=false
+      - PHOTOPRISM_UPLOAD_NSFW=true                # allows uploads that MAY be offensive (no effect without TensorFlow)
+      - PHOTOPRISM_DETECT_NSFW=false               # automatically flags photos as private that MAY be offensive (requires TensorFlow)
+      - PHOTOPRISM_DISABLE_FACES=false              # disables face detection and recognition (requires TensorFlow)
+      - PHOTOPRISM_DISABLE_CLASSIFICATION=false     # disables image classification (requires TensorFlow)
+      # PHOTOPRISM_DATABASE_DRIVER: "sqlite"         # SQLite is an embedded database that does not require a separate database server
+      - PHOTOPRISM_DATABASE_DRIVER=mysql            # MariaDB 10.5.12+ (MySQL successor) offers significantly better performance compared to SQLite
+      - PHOTOPRISM_DATABASE_SERVER=mariadb-photoprism:3306    # MariaDB database server (hostname:port)
+      - PHOTOPRISM_DATABASE_NAME=photoprism        # MariaDB database schema name
+      - PHOTOPRISM_DATABASE_USER=${PHOTOPRISM_USER}       # MariaDB database user name
+      - PHOTOPRISM_DATABASE_PASSWORD=${PHOTOPRISM_PASSWORD}       # MariaDB database user password
+      - PHOTOPRISM_BACKUP_DATABASE=true
+      - PHOTOPRISM_BACKUP_SCHEDULE=daily
+      - PHOTOPRISM_UID=1000
+      - PHOTOPRISM_GID=1000
+      - PHOTOPRISM_UMASK=0000
+      - user=1000:1000
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.photoprism-rtr.rule=Host(`photoprism.0040300.xyz`)"
+      - "traefik.http.routers.photoprism-rtr.tls=true"
+      - "traefik.http.services.photoprism-rtr.loadbalancer.server.port=2342"
+      - "traefik.http.routers.photoprism-rtr.entrypoints=websecure"
+      - "traefik.http.routers.photoprism-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.photoprism-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.photoprism-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Home"
+      - "homepage.name=photoprism"
+      - "homepage.icon=photoprism.png"
+      - "homepage.href=http://photoprism.0040300.xyz/"
+      - "homepage.description=Personal Photo Collection"
+      - "homepage.siteMonitor=http://photoprism:2342"
+    volumes:
+      - ${HDD_1_A_HOME}/Memories:/photoprism/originals
+      - ${DOCKER_HOME}/photoprism/storage:/photoprism/storage
+    stop_grace_period: 10s
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    depends_on:
+      - mariadb-photoprism
+    <<: *function
+
+  mariadb-photoprism:
+    image: mariadb:11
+    container_name: mariadb-photoprism
+    hostname: mariadb-photoprism
+    stop_grace_period: 5s
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    command: --innodb-buffer-pool-size=512M --transaction-isolation=READ-COMMITTED --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --max-connections=512 --innodb-rollback-on-timeout=OFF --innodb-lock-wait-timeout=120
+    volumes:
+      - "${DOCKER_HOME}/photoprism/mariadb:/var/lib/mysql"
+    environment:
+      MARIADB_AUTO_UPGRADE: "1"
+      MARIADB_INITDB_SKIP_TZINFO: "1"
+      MARIADB_DATABASE: "photoprism"
+      MARIADB_USER: "${PHOTOPRISM_USER}"
+      MARIADB_PASSWORD: "${PHOTOPRISM_PASSWORD}"
+      MARIADB_ROOT_PASSWORD: "${PHOTOPRISM_PASSWORD}"
+      TZ: "${TIMEZONE}"
+    labels:
+      - "homepage.group=Containers"
+      - "homepage.name=mariadb-photoprism"
+      - "homepage.icon=mariadb.png"
+      - "homepage.description=MariaDB for Photoprism"
+      #- "homepage.siteMonitor=tcp://mariadb-photoprism:3306"
+    <<: *function
+
+  pigallery2:
+    image: bpatrik/pigallery2:latest
+    container_name: pigallery2
+    user: 1000:1000
+    environment:
+      - TZ=${TIMEZONE}
+      - NODE_ENV=production # set to 'debug' for full debug logging
+      # - NODE_OPTIONS=--enable-source-maps # enable source map support on the backend  for development
+    volumes:
+      - "${DOCKER_HOME}/pigallery2/config:/app/data/config" # CHANGE ME
+      - "${DOCKER_HOME}/pigallery2/db:/app/data/db"
+     # - "${HDD_1_A_HOME}/trash:/app/data/images:ro" # CHANGE ME, ':ro' means read-only
+      - "${HDD_1_A_HOME}/trash:/app/data/images:ro" # CHANGE ME, ':ro' means read-only
+      - "${DOCKER_HOME}/pigallery2/tmp:/app/data/tmp" # CHANGE ME
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pigallery2-rtr.rule=Host(`pigallery2.0040300.xyz`)"
+      - "traefik.http.routers.pigallery2-rtr.tls=true"
+      - "traefik.http.services.pigallery2-rtr.loadbalancer.server.port=80"
+      - "traefik.http.routers.pigallery2-rtr.entrypoints=websecure"
+      - "traefik.http.routers.pigallery2-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.pigallery2-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.pigallery2-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=pigallery2"
+      - "homepage.icon=pigallery2.png"
+      - "homepage.href=http://pigallery2.0040300.xyz/"
+      - "homepage.description=Photo browser"
+      - "homepage.siteMonitor=http://pigallery2:80"
+    <<: *function

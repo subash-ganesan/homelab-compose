@@ -1,0 +1,103 @@
+
+x-function: &function
+  networks:
+    - home_net
+  restart: unless-stopped
+  profiles: ["downloader"]
+
+x-environment: &environment
+  PUID: 1000
+  PGID: 1000
+  TZ: ${TIMEZONE}
+
+
+services:
+  metube:
+    image: ghcr.io/alexta69/metube:2026.03.15
+    container_name: metube
+    environment:
+      - UID=1000
+      - GID=1000
+      - TZ=${TIMEZONE}
+      #- 'YTDL_OPTIONS={"writesubtitles":true,"subtitleslangs":["en","-live_chat"],"updatetime":false,"postprocessors":[{"key":"Exec","exec_cmd":"chmod 0664","when":"after_move"},{"key":"FFmpegEmbedSubtitle","already_have_subtitle":false},{"key":"FFmpegMetadata","add_chapters":true}]}'
+    volumes:
+      - ${HDD_1_A_HOME}/Downloads/metube:/downloads
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.metube-rtr.rule=Host(`metube.0040300.xyz`)"
+      - "traefik.http.routers.metube-rtr.tls=true"
+      - "traefik.http.services.metube-rtr.loadbalancer.server.port=8081"
+      - "traefik.http.routers.metube-rtr.entrypoints=websecure"
+      - "traefik.http.routers.metube-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.metube-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.metube-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=metube"
+      - "homepage.icon=metube.png"
+      - "homepage.href=http://metube.0040300.xyz/"
+      - "homepage.description=Video Downloader"
+      - "homepage.siteMonitor=http://metube:8081"
+    <<: *function
+
+  ariang:
+    image: hurlenko/aria2-ariang
+    container_name: ariang
+    volumes:
+      - ${HDD_1_A_HOME}/Downloads/ariang:/aria2/data
+      - ${DOCKER_HOME}/ariang:/aria2/conf
+      # if the usual connection doesnt work, then try WebSocket RPC protocol under Ariang settings
+    environment:
+      <<: *environment
+      RPC_SECRET: ${GENERAL_PASSWORD}
+      #- EMBED_RPC_SECRET: true
+      ARIA2RPCPORT: 443
+      BASIC_AUTH_USERNAME: ${GENERAL_USERNAME}
+      BASIC_AUTH_PASSWORD: ${GENERAL_PASSWORD}
+# Since Aria2 will continue to generate logs, limit the log size to 1M to prevent your hard disk from running out of space.
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ariang-rtr.rule=Host(`ariang.0040300.xyz`)"
+      - "traefik.http.routers.ariang-rtr.tls=true"
+      - "traefik.http.services.ariang-rtr.loadbalancer.server.port=8080"
+      - "traefik.http.routers.ariang-rtr.entrypoints=websecure"
+      - "traefik.http.routers.ariang-rtr.tls.certresolver=cloudflare"
+      - "traefik.http.routers.ariang-rtr.tls.domains[0].main=0040300.xyz"
+      - "traefik.http.routers.ariang-rtr.tls.domains[0].sans=*.0040300.xyz"
+      - "homepage.group=Tools"
+      - "homepage.name=ariang"
+      - "homepage.icon=ariang.png"
+      - "homepage.href=http://ariang.0040300.xyz/"
+      - "homepage.description=Downloader"
+      - "homepage.siteMonitor=http://ariang:8080"
+    <<: *function
+
+
+  # pyload:
+  #   image: lscr.io/linuxserver/pyload-ng:latest
+  #   container_name: pyload
+  #   environment:      # default creds are pyload:pyload
+  #     - PUID=1000
+  #     - PGID=1000
+  #     - TZ=${TIMEZONE}
+  #   volumes:
+  #     - ${HDD_1_A_HOME}/Downloads/pyload:/downloads
+  #     - ${DOCKER_HOME}/pyload:/config
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.pyload-rtr.rule=Host(`pyload.0040300.xyz`)"
+  #     - "traefik.http.routers.pyload-rtr.tls=true"
+  #     - "traefik.http.services.pyload-rtr.loadbalancer.server.port=8000"
+  #     - "traefik.http.routers.pyload-rtr.entrypoints=websecure"
+  #     - "homepage.group=Tools"
+  #     - "homepage.name=pyload"
+  #     - "homepage.icon=pyload.png"
+  #     - "homepage.href=http://pyload.0040300.xyz/"
+  #     - "homepage.description=Downloader"
+  #     - "homepage.siteMonitor=http://pyload:8000"
+    # <<: *function
+
+
